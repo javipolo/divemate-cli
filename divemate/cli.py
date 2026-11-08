@@ -385,8 +385,32 @@ GRAPH_FIELDS = {
 }
 
 
+def _fill_periods(labels: list[str], by: str) -> list[str]:
+    """Contiguous period labels from min..max so empty months/years show as 0."""
+    if not labels:
+        return []
+    if by == "year":
+        lo, hi = int(labels[0]), int(labels[-1])
+        return [str(y) for y in range(lo, hi + 1)]
+    # month: 'YYYY-MM'
+    first, last = labels[0], labels[-1]
+    y0, m0 = int(first[:4]), int(first[5:7])
+    y1, m1 = int(last[:4]), int(last[5:7])
+    out = []
+    y, m = y0, m0
+    while (y, m) <= (y1, m1):
+        out.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            y, m = y + 1, 1
+    return out
+
+
 def cmd_graph(db: DiveMate, a: argparse.Namespace) -> None:
     key = a.field.strip().lower()
+    if key in ("count", "dives"):
+        _graph_count(db, a)
+        return
     if key not in GRAPH_FIELDS:
         raise ValueError(f"cannot graph {a.field!r}. Fields: "
                          + ", ".join(sorted(set(f for f, _ in GRAPH_FIELDS.values()))))
@@ -414,6 +438,31 @@ def cmd_graph(db: DiveMate, a: argparse.Namespace) -> None:
     title = f"{col} — {_describe_filters(a)}"
     for line in series_chart(xs, ys, title=title, ylabel=f"{col} ({unit})" if unit
                              else col, xticks=xticks):
+        print(line)
+
+
+def _graph_count(db: DiveMate, a: argparse.Namespace) -> None:
+    by = (a.by or "month").strip().lower()
+    if by not in ("month", "year"):
+        raise ValueError("--by must be 'month' or 'year'")
+    rows = db.group_count(by, _filter_from_args(a), order="value")
+    counts = {r["value"]: r["dives"] for r in rows}
+    labels = _fill_periods(sorted(counts), by)
+    ys: list[float | None] = [counts.get(lbl, 0) for lbl in labels]
+    if a.json:
+        print(json.dumps([{"period": lbl, "dives": counts.get(lbl, 0)}
+                          for lbl in labels], ensure_ascii=False, indent=2))
+        return
+    if not labels:
+        print("(no data to plot)")
+        return
+    xs = list(range(len(labels)))
+    step = max(1, len(labels) // 8)
+    xticks = [(float(i), labels[i]) for i in range(0, len(labels), step)]
+    from .chart import series_chart
+    title = f"dives per {by} — {_describe_filters(a)}"
+    for line in series_chart(xs, ys, title=title, ylabel="dives",
+                             xticks=xticks, color="green+", int_y=True):
         print(line)
 
 
@@ -642,7 +691,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     pgr = sub.add_parser("graph", help="plot a numeric field over time (+ filters)")
     pgr.add_argument("field", help="field to plot: depth (maxdepth), avgdepth, "
-                     "divetime, watertemp, sac")
+                     "divetime, watertemp, sac; or 'count' for dives per period")
+    pgr.add_argument("--by", choices=("month", "year"),
+                     help="for 'count': bucket size (default month)")
     pgr.add_argument("--desc", action="store_true", help="newest first")
     _add_filter_args(pgr)
     pgr.set_defaults(func=cmd_graph)

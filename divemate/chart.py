@@ -143,7 +143,7 @@ def series_chart(xs: list[float], ys: list[float | None], *,
                  title: str | None = None, ylabel: str = "",
                  xticks: list[tuple[float, str]] | None = None,
                  color: str = "cyan+", width: int | None = None,
-                 height: int = 18) -> list[str]:
+                 height: int = 18, int_y: bool = False) -> list[str]:
     """Plot one numeric series. Uses plotext when available (coloured line with
     custom x tick labels), else the plain ASCII ``line_chart``.
 
@@ -168,6 +168,10 @@ def series_chart(xs: list[float], ys: list[float | None], *,
         pos = [p for p, _ in xticks]
         lab = [l for _, l in xticks]
         plt.xticks(pos, lab)
+    if int_y:
+        import math
+        yt = _int_ticks(math.floor(min(py)), math.ceil(max(py)), 8)
+        plt.yticks(yt, [str(t) for t in yt])
     if title:
         plt.title(title)
     plt.plotsize(width, height)

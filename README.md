@@ -267,6 +267,10 @@ Plots a numeric field across the matching dives in date order (x axis labelled
 with dive dates, y axis the field). Accepts all the same filters as `list`.
 Fields: `depth` (a.k.a. `maxdepth`), `avgdepth`, `divetime`, `watertemp`, `sac`.
 
+Use the special field **`count`** to plot the **number of dives per period**
+instead of a per-dive value: `--by month` (default) or `--by year`, with empty
+periods shown as 0. Combine with any filter — e.g. dives with a buddy over time.
+
 With the `charts` extra (`plotext`) it is a coloured line chart; otherwise a
 plain ASCII chart. `--json` prints the `{date, number, value}` points instead.
 Dives missing the field (or with a 0 that means "no data") leave a gap.
@@ -275,6 +279,8 @@ Dives missing the field (or with a 0 that means "no data") leave a gap.
 dmcli graph sac --year 2024              # how your air consumption trends
 dmcli graph depth --place Tossa          # max depth per dive at a site
 dmcli graph watertemp                    # water temperature over your whole log
+dmcli graph count --buddy Lushka         # dives with a buddy, per month
+dmcli graph count --by year              # dives per year across the whole log
 ```
 
 ### `group`
