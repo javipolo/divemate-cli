@@ -265,7 +265,7 @@ avg_watertemp_c        17.7
 
 Plots a numeric field across the matching dives in date order (x axis labelled
 with dive dates, y axis the field). Accepts all the same filters as `list`.
-Fields: `depth`, `avgdepth`, `divetime`, `watertemp`, `o2`, `sac`, `number`.
+Fields: `depth` (a.k.a. `maxdepth`), `avgdepth`, `divetime`, `watertemp`, `sac`.
 
 With the `charts` extra (`plotext`) it is a coloured line chart; otherwise a
 plain ASCII chart. `--json` prints the `{date, number, value}` points instead.
