@@ -473,7 +473,7 @@ def _graph_count(db: DiveMate, a: argparse.Namespace) -> None:
     a2 = argparse.Namespace(**vars(a))
     a2.period = a2.date_from = a2.date_to = a2.year = None
     rest = _describe_filters(a2)
-    span = f"{labels[0]} … {labels[-1]}"
+    span = f"{labels[0]} to {labels[-1]}"
     title = f"dives per {by} — {span}" + (f", {rest}" if rest != "all dives" else "")
     for line in series_chart(xs, ys, title=title, ylabel="dives",
                              xticks=xticks, color="green+", int_y=True):
