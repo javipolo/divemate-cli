@@ -445,9 +445,17 @@ def _graph_count(db: DiveMate, a: argparse.Namespace) -> None:
     by = (a.by or "month").strip().lower()
     if by not in ("month", "year"):
         raise ValueError("--by must be 'month' or 'year'")
-    rows = db.group_count(by, _filter_from_args(a), order="value")
+    filt = _filter_from_args(a)
+    rows = db.group_count(by, filt, order="value")
     counts = {r["value"]: r["dives"] for r in rows}
-    labels = _fill_periods(sorted(counts), by)
+    # --from / --to also fix the axis extent (zero-filled up to those dates)
+    keys = set(counts)
+    period = (lambda iso: iso[:4]) if by == "year" else (lambda iso: iso[:7])
+    if filt.date_from:
+        keys.add(period(filt.date_from))
+    if filt.date_to:
+        keys.add(period(filt.date_to))
+    labels = _fill_periods(sorted(keys), by)
     ys: list[float | None] = [counts.get(lbl, 0) for lbl in labels]
     if a.json:
         print(json.dumps([{"period": lbl, "dives": counts.get(lbl, 0)}

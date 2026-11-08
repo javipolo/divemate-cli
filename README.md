@@ -270,6 +270,8 @@ Fields: `depth` (a.k.a. `maxdepth`), `avgdepth`, `divetime`, `watertemp`, `sac`.
 Use the special field **`count`** to plot the **number of dives per period**
 instead of a per-dive value: `--by month` (default) or `--by year`, with empty
 periods shown as 0. Combine with any filter — e.g. dives with a buddy over time.
+`--from`/`--to` (and `--period`) set the start/end of the x axis, zero-filling
+out to those dates even when there are no dives there.
 
 With the `charts` extra (`plotext`) it is a coloured line chart; otherwise a
 plain ASCII chart. `--json` prints the `{date, number, value}` points instead.
@@ -281,6 +283,7 @@ dmcli graph depth --place Tossa          # max depth per dive at a site
 dmcli graph watertemp                    # water temperature over your whole log
 dmcli graph count --buddy Lushka         # dives with a buddy, per month
 dmcli graph count --by year              # dives per year across the whole log
+dmcli graph count --by year --from 01-01-2015 --to 31-12-2026   # fixed axis span
 ```
 
 ### `group`
