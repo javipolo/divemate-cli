@@ -15,12 +15,18 @@ ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ES_RE = re.compile(r"^(\d{1,2})-(\d{1,2})-(\d{4})$")
 
 
-def parse_date(s: str) -> str:
-    """Accept ``DD-MM-YYYY`` or ISO ``YYYY-MM-DD``; return ISO.
+def parse_date(s: str, today: _dt.date | None = None) -> str:
+    """Accept ``DD-MM-YYYY``, ISO ``YYYY-MM-DD`` or the relative keywords
+    ``today``/``now`` and ``yesterday`` (Spanish ``hoy``/``ayer``); return ISO.
 
     Raises ValueError on anything else.
     """
     s = s.strip()
+    k = s.lower()
+    if k in ("today", "now", "hoy"):
+        return (today or _dt.date.today()).isoformat()
+    if k in ("yesterday", "ayer"):
+        return ((today or _dt.date.today()) - _dt.timedelta(days=1)).isoformat()
     if ISO_RE.match(s):
         _dt.date.fromisoformat(s)  # validate
         return s
@@ -28,7 +34,8 @@ def parse_date(s: str) -> str:
     if m:
         d, mo, y = (int(x) for x in m.groups())
         return _dt.date(y, mo, d).isoformat()  # validates ranges
-    raise ValueError(f"invalid date {s!r} (use DD-MM-YYYY or YYYY-MM-DD)")
+    raise ValueError(
+        f"invalid date {s!r} (use DD-MM-YYYY, YYYY-MM-DD, today or yesterday)")
 
 
 def format_date_es(iso: str) -> str:

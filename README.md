@@ -142,7 +142,8 @@ Accepted by `list`, `count`, `stats`, `group`, and `years`:
 | `--all-divers` | Include every diver profile, not just yours |
 
 **Dates** are shown and accepted in Spanish `DD-MM-YYYY` format (ISO input still
-works; `--json` output stays ISO for machines).
+works; `--json` output stays ISO for machines). `--from`/`--to` also accept the
+keywords `today` (`now`) and `yesterday`, e.g. `--from 01-01-2026 --to today`.
 
 `--period` accepts quick relative ranges (case-insensitive):
 
