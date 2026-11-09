@@ -199,6 +199,8 @@ COLUMN_UNITS = {
     "O2": "%",
 }
 COLUMN_ROUND_INT = {"Divetime"}
+# columns where a stored 0 means "no data" and should render blank, not "0"
+COLUMN_ZERO_IS_EMPTY = {"Tanksize"}
 
 
 def _print_table(rows: list[dict], cols: list[str],
@@ -220,7 +222,7 @@ def _print_table(rows: list[dict], cols: list[str],
 
 
 def _fmt_cell(col: str, v, units: dict[str, str]) -> str:
-    if v is None or v == "":
+    if v is None or v == "" or (col in COLUMN_ZERO_IS_EMPTY and v == 0):
         return "—"
     # show entry time as HH:MM, dropping stored seconds
     if col == "Entrytime" and isinstance(v, str) and len(v) >= 5:
