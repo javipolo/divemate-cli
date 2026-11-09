@@ -9,8 +9,8 @@ import re
 import sys
 
 from . import query
-from .db import DiveMate, DiveFilter
 from .dates import format_date_es
+from .db import DiveFilter, DiveMate
 
 DEFAULT_DB = os.environ.get("DIVEMATE_DB", "DiveMate.ddb")
 
@@ -412,7 +412,8 @@ def cmd_info(db: DiveMate, a: argparse.Namespace) -> None:
         try:
             number = int(a.number)
         except ValueError:
-            raise ValueError(f"invalid dive {a.number!r} (a number, 'last' or 'first')")
+            raise ValueError(
+                f"invalid dive {a.number!r} (a number, 'last' or 'first')") from None
     if number is None:
         print("no dives")
         return
@@ -498,7 +499,7 @@ def cmd_graph(db: DiveMate, a: argparse.Namespace) -> None:
         return
     if key not in GRAPH_FIELDS:
         raise ValueError(f"cannot graph {a.field!r}. Fields: "
-                         + ", ".join(sorted(set(f for f, _ in GRAPH_FIELDS.values()))))
+                         + ", ".join(sorted({f for f, _ in GRAPH_FIELDS.values()})))
     col, unit = GRAPH_FIELDS[key]
     rows = db.dives(_filter_from_args(a), order="Divedate", desc=a.desc,
                     predicate=_predicate_from_args(a))
@@ -511,7 +512,7 @@ def cmd_graph(db: DiveMate, a: argparse.Namespace) -> None:
         else:
             ys.append(v)
     pairs = [{"date": r["Divedate"], "number": r["Number"], "value": y}
-             for r, y in zip(rows, ys)]
+             for r, y in zip(rows, ys, strict=True)]
     if a.json:
         print(json.dumps(pairs, ensure_ascii=False, indent=2))
         return
@@ -697,8 +698,9 @@ def _bash_completion_script() -> str:
     # value suggestions for positionals that take a known set of words
     from .db import _GROUPABLE
     positional = {
-        "group": sorted(_GROUPABLE) + ["year", "month", "week", "weekend", "night", "buddy", "region"],
-        "graph": sorted(GRAPH_FIELDS) + ["count"],
+        "group": [*sorted(_GROUPABLE), "year", "month", "week", "weekend",
+                  "night", "buddy", "region"],
+        "graph": [*sorted(GRAPH_FIELDS), "count"],
         "info": ["last", "first"],
         "completion": ["bash"],
     }

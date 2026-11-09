@@ -33,7 +33,7 @@ class GDriveConfig:
 
     @classmethod
     def from_env(cls, key_file: str | None = None, folder_id: str | None = None,
-                 file_name: str | None = None) -> "GDriveConfig":
+                 file_name: str | None = None) -> GDriveConfig:
         key = key_file or os.environ.get("DIVEMATE_GDRIVE_KEY")
         folder = folder_id or os.environ.get("DIVEMATE_GDRIVE_FOLDER")
         name = file_name or os.environ.get("DIVEMATE_GDRIVE_FILE") or "DiveMate.ddb"
@@ -50,8 +50,8 @@ class GDriveConfig:
 def _token(key_file: str) -> str:
     """Mint an OAuth access token from the service-account key."""
     try:
-        from google.oauth2 import service_account  # type: ignore
         from google.auth.transport.requests import Request  # type: ignore
+        from google.oauth2 import service_account  # type: ignore
     except ImportError as e:  # pragma: no cover
         raise RuntimeError(
             "google-auth is required for 'pull'. Install with: "
@@ -65,7 +65,7 @@ def _token(key_file: str) -> str:
 
 def _get(url: str, token: str) -> bytes:
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-    with urllib.request.urlopen(req) as resp:  # noqa: S310 (trusted Google URL)
+    with urllib.request.urlopen(req) as resp:
         return resp.read()
 
 

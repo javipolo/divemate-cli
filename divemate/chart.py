@@ -46,7 +46,7 @@ def series_chart(xs: list[float], ys: list[float | None], *,
     if width is None:
         width = max(40, min(100, term_width() - 2))
     # plotext can't skip None; plot only the present points
-    px = [x for x, v in zip(xs, ys) if v is not None]
+    px = [x for x, v in zip(xs, ys, strict=True) if v is not None]
     py = [v for v in ys if v is not None]
     plt.clf()
     plt.theme("clear")
@@ -83,7 +83,7 @@ def profile_chart(times: list[float], depths: list[float],
     # and render our own below, in the natural depth-left / temp-right order.
     have_temp = bool(temps) and any(t is not None for t in temps)
     if have_temp:
-        xt = [x for x, t in zip(times, temps) if t is not None]  # type: ignore[arg-type]
+        xt = [x for x, t in zip(times, temps, strict=True) if t is not None]  # type: ignore[arg-type]
         yt = [t for t in temps if t is not None]                 # type: ignore[union-attr]
         plt.plot(xt, yt, yside="right", color="red+")
         tticks = _int_ticks(math.floor(min(yt)), math.ceil(max(yt)), 7)
@@ -95,7 +95,7 @@ def profile_chart(times: list[float], depths: list[float],
     dticks = _int_ticks(0, dmax, 7)
     plt.yticks([-t for t in dticks], [str(t) for t in dticks], yside="left")
 
-    tmax = int(round(times[-1])) or 1
+    tmax = round(times[-1]) or 1
     xticks = _int_ticks(0, tmax, 6)
     plt.xticks(xticks, [str(t) for t in xticks])
 

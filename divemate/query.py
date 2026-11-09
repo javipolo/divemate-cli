@@ -32,8 +32,10 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass, field as _dc_field
-from typing import Any, Callable
+from collections.abc import Callable
+from dataclasses import dataclass
+from dataclasses import field as _dc_field
+from typing import Any
 
 from lark import Lark, Transformer, v_args
 from lark.exceptions import LarkError
@@ -45,17 +47,17 @@ from .dates import parse_period
 
 @dataclass
 class And:
-    items: list["Node"]
+    items: list[Node]
 
 
 @dataclass
 class Or:
-    items: list["Node"]
+    items: list[Node]
 
 
 @dataclass
 class Not:
-    item: "Node"
+    item: Node
 
 
 @dataclass
@@ -78,7 +80,7 @@ class Query:
     """A parsed query: a filter expression plus optional presentation directives
     (sort / limit). `expr` is None for a directives-only query like
     `sort depth limit 5`."""
-    expr: "Node | None" = None
+    expr: Node | None = None
     sort: str | None = None
     desc: bool = True            # default newest/highest first, like list used to
     limit: int | None = None
@@ -301,7 +303,7 @@ class _ToAst(Transformer):
         return _build_query(None, dirs)
 
 
-def _build_query(expr, dirs) -> "Query":
+def _build_query(expr, dirs) -> Query:
     q = Query(expr=expr)
     for d in dirs:
         if d[0] == "sort":

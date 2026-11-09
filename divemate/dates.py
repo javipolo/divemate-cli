@@ -108,7 +108,8 @@ def parse_period(s: str, today: _dt.date | None = None) -> tuple[str, str]:
     if m:
         return _month_range(int(m.group(1)), int(m.group(2)))
 
-    m = re.match(r"^last\s+(\d+)\s+days?$", k) or re.match(r"^(?:ultimos|últimos)\s+(\d+)\s+d[ií]as?$", k)
+    m = (re.match(r"^last\s+(\d+)\s+days?$", k)
+         or re.match(r"^(?:ultimos|últimos)\s+(\d+)\s+d[ií]as?$", k))
     if m:
         n = int(m.group(1))
         start = today - _dt.timedelta(days=n - 1)

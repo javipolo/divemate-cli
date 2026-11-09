@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 
 @dataclass
@@ -177,7 +178,7 @@ class DiveMate:
     def close(self) -> None:
         self.conn.close()
 
-    def __enter__(self) -> "DiveMate":
+    def __enter__(self) -> DiveMate:
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -614,8 +615,8 @@ class DiveMate:
                     "THEN 'weekend' ELSE 'weekday' END")
         if key in _GROUPABLE_LC:
             return f"L.{_GROUPABLE_LC[key]}"
-        allowed = ", ".join(sorted(_GROUPABLE) +
-                            ["year", "month", "week", "weekend", "night", "buddy", "region"])
+        allowed = ", ".join([*sorted(_GROUPABLE), "year", "month", "week",
+                             "weekend", "night", "buddy", "region"])
         raise ValueError(f"cannot group by {column!r}. Allowed: {allowed}")
 
     def dives_per_year(self, f: DiveFilter | None = None,

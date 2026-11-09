@@ -3,7 +3,7 @@
 import pytest
 
 from divemate import query as q
-from divemate.query import And, Or, Not, Compare, Flag
+from divemate.query import And, Compare, Flag, Not, Or
 
 
 def P(expr):
