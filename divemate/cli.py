@@ -34,12 +34,41 @@ def _add_filter_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--max-depth", type=float, help="maximum max-depth (m)")
     p.add_argument("--min-divetime", type=float, help="minimum dive time (min)")
     p.add_argument("--water", type=int, choices=(0, 1), help="1=salt, 0=fresh")
+    wk = p.add_mutually_exclusive_group()
+    wk.add_argument("--weekend", dest="weekend", action="store_true", default=None,
+                    help="only dives on Sat/Sun")
+    wk.add_argument("--weekday", dest="weekend", action="store_false", default=None,
+                    help="only dives on Mon–Fri")
+    nt = p.add_mutually_exclusive_group()
+    nt.add_argument("--night", dest="night", action="store_true", default=None,
+                    help="only night dives (entry 18:00–06:00)")
+    nt.add_argument("--day", dest="night", action="store_false", default=None,
+                    help="only day dives (entry 06:00–18:00)")
     p.add_argument("--include-deleted", action="store_true",
                    help="include dives DiveMate soft-deleted (Status=2)")
     p.add_argument("--diver", type=int, metavar="ID",
                    help="restrict to this DiverID (default: the owner / most dives)")
     p.add_argument("--all-divers", action="store_true",
                    help="include every diver profile, not just yours")
+
+
+def parse_number_range(s: str) -> tuple[int | None, int | None]:
+    """'100-130' -> (100, 130); '100' -> (100, 100); '100-' -> (100, None);
+    '-130' -> (None, 130). Raises ValueError on anything else."""
+    s = s.strip()
+    try:
+        if "-" in s:
+            lo_s, hi_s = s.split("-", 1)
+            lo = int(lo_s) if lo_s.strip() else None
+            hi = int(hi_s) if hi_s.strip() else None
+            if lo is None and hi is None:
+                raise ValueError
+            return lo, hi
+        n = int(s)
+        return n, n
+    except ValueError:
+        raise ValueError(
+            f"invalid dive range {s!r} (use N, N-M, N-, or -M)") from None
 
 
 def _filter_from_args(a: argparse.Namespace) -> DiveFilter:
@@ -57,13 +86,20 @@ def _filter_from_args(a: argparse.Namespace) -> DiveFilter:
     if a.date_to:
         date_to = parse_date(a.date_to)
 
+    # optional positional dive-number range, e.g. `list 100-130` or `list 100`
+    number_from, number_to = None, None
+    if getattr(a, "range", None):
+        number_from, number_to = parse_number_range(a.range)
+
     return DiveFilter(
         year=a.year, date_from=date_from, date_to=date_to,
+        number_from=number_from, number_to=number_to,
         tanksize=a.tanksize, exclude_tanksize=a.exclude_tanksize,
         place=a.place, country=a.country, buddy=a.buddy,
         comment=comment,
         min_depth=a.min_depth, max_depth=a.max_depth,
         min_divetime=a.min_divetime, water=a.water,
+        weekend=a.weekend, night=a.night,
         include_deleted=a.include_deleted,
         diver=a.diver, all_divers=a.all_divers,
     )
@@ -94,6 +130,12 @@ def _plural(word: str) -> str:
 def _describe_filters(a: argparse.Namespace) -> str:
     """Human-readable summary of the active filters, as the user typed them."""
     p = []
+    if getattr(a, "range", None):
+        lo, hi = parse_number_range(a.range)
+        if lo is not None and hi is not None and lo == hi:
+            p.append(f"#{lo}")
+        else:
+            p.append(f"#{lo if lo is not None else '…'}–{hi if hi is not None else '…'}")
     if getattr(a, "period", None):
         p.append(_describe_period(a.period))
     if a.year:
@@ -124,6 +166,10 @@ def _describe_filters(a: argparse.Namespace) -> str:
         p.append(f"≥{a.min_divetime:g} min")
     if a.water is not None:
         p.append("salt water" if a.water == 1 else "fresh water")
+    if getattr(a, "weekend", None) is not None:
+        p.append("weekend" if a.weekend else "weekday")
+    if getattr(a, "night", None) is not None:
+        p.append("night dives" if a.night else "day dives")
     if a.all_divers:
         p.append("all divers")
     elif a.diver is not None:
@@ -176,6 +222,9 @@ def _print_table(rows: list[dict], cols: list[str],
 def _fmt_cell(col: str, v, units: dict[str, str]) -> str:
     if v is None or v == "":
         return "—"
+    # show entry time as HH:MM, dropping stored seconds
+    if col == "Entrytime" and isinstance(v, str) and len(v) >= 5:
+        return v[:5]
     if isinstance(v, (int, float)) and not isinstance(v, bool):
         num = round(v) if col in COLUMN_ROUND_INT else v
         s = f"{num:g}" if isinstance(num, float) else str(num)
@@ -201,10 +250,91 @@ def cmd_list(db: DiveMate, a: argparse.Namespace) -> None:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
         return
     cols = a.columns.split(",") if a.columns else \
-        ["Number", "Divedate", "Place", "Depth", "Divetime", "Tanksize", "Watertemp"]
+        ["Number", "Divedate", "Entrytime", "Place", "Depth", "Divetime",
+         "Tanksize", "Watertemp"]
     _header(f"Dives — {_describe_filters(a)}")
     _print_table(rows, cols, units=COLUMN_UNITS)
     print(f"\n{len(rows)} dive(s)")
+
+
+# (label, column, unit) for the `info` detail view, in display order.
+_INFO_FIELDS = [
+    ("Dive #", "Number", ""),
+    ("Date", "Divedate", ""),
+    ("Entry time", "Entrytime", ""),
+    ("Country", "Country", ""),
+    ("Place", "Place", ""),
+    ("Dive time", "Divetime", "min"),
+    ("Max depth", "Depth", "m"),
+    ("Avg depth", "DepthAvg", "m"),
+    ("Water temp", "Watertemp", "°C"),
+    ("Air temp", "Airtemp", "°C"),
+    ("Surface int.", "Surfint", ""),
+    ("Computer", "Computer", ""),
+    ("Dive suit", "Divesuit", ""),
+    ("Weight", "Weight", "kg"),
+    ("Dive type", "Divetype", ""),
+    ("Rating", "Rating", ""),
+    ("Boat", "Boat", ""),
+    ("Weather", "Weather", ""),
+    ("Waves", "Waves", ""),
+    ("Current", "UWCurrent", ""),
+    ("Divemaster", "Divemaster", ""),
+]
+
+
+def _print_dive(r: dict) -> None:
+    water = {1: "salt", 0: "fresh"}.get(r.get("Water"))
+    for label, col, unit in _INFO_FIELDS:
+        v = r.get(col)
+        if v in (None, "", 0) and col not in ("Number",):
+            continue
+        if col == "Divedate":
+            v = format_date_es(v)
+        elif isinstance(v, float):
+            v = f"{round(v, 1):g}"
+        txt = f"{v} {unit}".strip() if unit else str(v)
+        print(f"{label:<14} {txt}")
+    if water:
+        print(f"{'Water':<14} {water}")
+    buddies = r.get("buddies") or ([r["Buddy"]] if r.get("Buddy") else [])
+    if buddies:
+        print(f"{'Buddies':<14} {', '.join(buddies)}")
+    tanks = r.get("tanks") or []
+    for i, t in enumerate(tanks, 1):
+        parts = []
+        if t.get("Tanksize"):
+            parts.append(f"{t['Tanksize']:g} L")
+        if t.get("O2"):
+            parts.append(f"O₂ {t['O2']:g}%")
+        if t.get("He"):
+            parts.append(f"He {t['He']:g}%")
+        if t.get("PresS") and t.get("PresE"):
+            parts.append(f"{t['PresS']:g}→{t['PresE']:g} bar")
+        if t.get("Name"):
+            parts.append(str(t["Name"]))
+        if parts:
+            print(f"{'Tank ' + str(i):<14} {'  '.join(parts)}")
+    if r.get("Comments"):
+        print(f"\n{r['Comments']}")
+
+
+def cmd_info(db: DiveMate, a: argparse.Namespace) -> None:
+    rows = db.dive_full(a.number, diver=a.diver, all_divers=a.all_divers,
+                        include_deleted=a.include_deleted)
+    if a.json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+        return
+    if not rows:
+        print(f"no dive #{a.number}")
+        return
+    for i, r in enumerate(rows):
+        if i:
+            print("\n" + "-" * 40)
+        _print_dive(r)
+    if len(rows) > 1:
+        print(f"\n({len(rows)} dives share #{a.number} — "
+              f"use --diver ID to pick one)")
 
 
 def cmd_count(db: DiveMate, a: argparse.Namespace) -> None:
@@ -253,7 +383,10 @@ def cmd_group(db: DiveMate, a: argparse.Namespace) -> None:
     if a.json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
         return
-    field = _plural(a.by.lower())
+    # virtual split dimensions have no natural plural noun — call them "groups"
+    key = a.by.strip().lower()
+    field = "groups" if key in ("weekend", "weekday", "night", "day") \
+        else _plural(key)
     scope = f"Top {a.limit} {field}" if a.limit else field.capitalize()
     _header(f"{scope} by number of dives — {_describe_filters(a)}")
     if a.sort == "count":
@@ -321,10 +454,23 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pl = sub.add_parser("list", help="list dives matching filters")
+    pl.add_argument("range", nargs="?", metavar="N-M",
+                    help="dive number range, e.g. 100-130 (or a single number, "
+                         "or open-ended 100- / -130)")
     _add_filter_args(pl)
     pl.add_argument("--columns", help="comma-separated column list")
     pl.add_argument("--desc", action="store_true", help="newest first")
     pl.set_defaults(func=cmd_list)
+
+    pi = sub.add_parser("info", help="show every detail of one dive by its number")
+    pi.add_argument("number", type=int, help="dive number, e.g. 501")
+    pi.add_argument("--diver", type=int, metavar="ID",
+                    help="pick a diver if a number is shared (default: the owner)")
+    pi.add_argument("--all-divers", action="store_true",
+                    help="search every diver profile")
+    pi.add_argument("--include-deleted", action="store_true",
+                    help="include dives DiveMate soft-deleted (Status=2)")
+    pi.set_defaults(func=cmd_info)
 
     pc = sub.add_parser("count", help="count matching dives")
     _add_filter_args(pc)
@@ -336,7 +482,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     pg = sub.add_parser("group", help="count dives grouped by a field (+ filters)")
     pg.add_argument("by", help="field to group by: Place, Country, Buddy, Computer, "
-                    "Divesuit, Water, Tanksize, Boat, Rating, ... or year / month")
+                    "Divesuit, Water, Tanksize, Boat, Rating, ... or year / month / "
+                    "weekend / night")
     pg.add_argument("--limit", type=int, help="show only the top N groups")
     pg.add_argument("--sort", choices=("count", "value"), default="count",
                     help="order by dive count (default) or by the group value")

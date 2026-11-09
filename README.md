@@ -6,17 +6,19 @@ a clean CLI and a small reusable Python library on top of it, so you can slice
 your dive log without writing SQL by hand.
 
 ```console
-$ dmcli list --year 2026 --tank 24.0
-Number  Divedate    Place                             Depth  Divetime  Tanksize  Watertemp
-------  ----------  --------------------------------  -----  --------  --------  ---------
-641     2026-04-10  Tossa. Ruta clàsica completa      22.3   80.0167   24        13
-646     2026-05-08  Tossa. Ruta larga                 20.3   96.7167   24        16
-647     2026-05-15  Tossa. Perduts                    27.9   87.55     24        17
-653     2026-06-05  Tossa. Ruta larga                 29.1   102.217   24        19
-688     2026-08-04  Tossa. Ruta clàsica completa      22.6   132.85    24        22
-728     2026-10-16  Sant Feliu. Túnels de Port Salvi  27.9   99.1667   24        19
+$ dmcli list --tank 24 --period 'last year'
+Dives — year 2025, tank 24L
+Number  Divedate    Place                             Depth   Divetime  Tanksize  Watertemp
+------  ----------  --------------------------------  ------  --------  --------  ---------
+487     07-02-2025  Tossa. Perduts                    29.9 m  104 min   24 L      13 °C
+513     16-06-2025  Barcelona. Port del Forum         3.5 m   198 min   24 L      24 °C
+514     17-06-2025  Tossa. Ruta clàsica dreta         20.4 m  69 min    24 L      22 °C
+517     01-07-2025  Sant Feliu. Túnels de Port Salvi  27.9 m  96 min    24 L      19 °C
+541     22-08-2025  Cova De Cala Sa Nau               9.2 m   118 min   24 L      27 °C
+544     07-09-2025  Tarragona. SES. Dragonera         22.3 m  69 min    24 L      22 °C
+549     20-09-2025  Tossa. Ruta larga                 27.5 m  98 min    24 L      17 °C
 
-6 dive(s)
+7 dive(s)
 ```
 
 ## Features
@@ -95,7 +97,8 @@ Run `divemate <command> --help` for the full option list of any command.
 
 | Command | What it does |
 |---------|--------------|
-| `list`  | List dives matching the filters |
+| `list`  | List dives matching the filters (optional `N-M` number range) |
+| `info`  | Show every detail of one dive by its number |
 | `count` | Count matching dives |
 | `stats` | Aggregate statistics over matching dives |
 | `group` | Count dives grouped by a column, ranked |
@@ -129,6 +132,8 @@ Accepted by `list`, `count`, `stats`, `group`, and `years`:
 | `--max-depth M` | Max depth ≤ M metres |
 | `--min-divetime MIN` | Dive time ≥ MIN minutes |
 | `--water {0,1}` | 1 = salt water, 0 = fresh |
+| `--weekend` / `--weekday` | Only Sat/Sun, or only Mon–Fri (by dive date) |
+| `--night` / `--day` | Only night dives, or only day dives (by entry time) |
 | `--include-deleted` | Include dives DiveMate soft-deleted (`Status=2`) |
 | `--diver ID` | Restrict to a given `DiverID` (default: the owner) |
 | `--all-divers` | Include every diver profile, not just yours |
@@ -154,21 +159,59 @@ Filters combine with AND. `--tank` matches **any** tank recorded on a dive (it
 joins the per-dive `Tank` table), not only the primary tank stored on the dive
 record — so a dive where the 24 L was a stage or deco tank still matches.
 
+`--weekend`/`--weekday` split on the dive's weekday (Sat/Sun vs Mon–Fri).
+
+`--night`/`--day` split on the entry time: a dive entered from **18:00 to 06:00**
+counts as night, otherwise day (diving after 18:00 in daylight is rare enough
+that a fixed cutoff beats any seasonal guess). Dives without a recorded entry
+time match neither.
+
 ### `list`
+
+Takes an optional dive-number range as the first argument: `N-M` (inclusive),
+a single `N`, or open-ended `N-` / `-M`. Combines with every other filter.
 
 Extra options: `--columns a,b,c` to choose columns, `--desc` for newest first.
 
 ```bash
+dmcli list 100-130                             # dives numbered 100 through 130
+dmcli list 500                                 # just dive 500
+dmcli list 700- --desc                         # dive 700 to the latest
 dmcli list --year 2026 --tank 24.0
 dmcli list --place Tossa --min-depth 25 --desc
 dmcli list --tag sidemount --year 2026        # dives tagged #sidemount
 dmcli list --comment "ejercicio"               # free-text comment search
 dmcli tags                                     # see every #tag you use
+dmcli list --weekend --night                   # night dives on weekends
+dmcli stats --weekday --day                     # weekday daytime dives
 dmcli list --period "this month"
 dmcli stats --period "year 2024"
 dmcli list --from 01-06-2025 --to 31-08-2025   # Spanish DD-MM-YYYY
 dmcli list --from 2025-06-01 --to 2025-08-31 --columns Number,Divedate,Place,Depth
 ```
+
+### `info`
+
+Shows every detail of a single dive — date, site, times, depths, temperatures,
+gear, each tank (size, gas mix, start→end pressure) and the comment — looked up
+by its dive number.
+
+```console
+$ dmcli info 262
+Dive #         262
+Date           15-08-2021
+Entry time     09:30:00
+Country        Spain
+Place          Begur. Furió Fitó
+Dive time      67.3 min
+Max depth      52.5 m
+...
+Tank 1         24 L  O₂ 21%  220→120 bar
+Tank 2         11 L  O₂ 50%  180→100 bar
+```
+
+A dive number is only unique per diver; if several profiles share it, all are
+shown — pass `--diver ID` (see `dmcli divers`) to pick one.
 
 ### `stats`
 
@@ -191,8 +234,10 @@ can scope the breakdown any way you want.
 
 Group by (case-insensitive): `Place`, `Country`, `Buddy`, `Computer`, `Divesuit`,
 `Water`, `Tanksize`, `Tanktype`, `Divemaster`, `Boat`, `Weather`, `Waves`,
-`UWCurrent`, `Rating`, `Entry`, `Deco`, `Divetype`, `O2`, or the virtual `year` /
-`month`.
+`UWCurrent`, `Rating`, `Entry`, `Deco`, `Divetype`, `O2`, or the virtual `year`,
+`month`, `weekend` (splits into `weekday` / `weekend`) and `night` (splits into
+`night` / `day`, plus `unknown` for dives with no entry time — same 18:00–06:00
+rule as the `--night`/`--day` filters).
 
 Options: `--limit N` (top N groups), `--sort count|value` (default `count`).
 
@@ -206,6 +251,8 @@ dmcli group country                         # dives per country
 dmcli group tanksize                        # dives per tank size
 dmcli group year --sort value               # dives per year, chronological
 dmcli group month --year 2026 --tag sidemount   # sidemount per month in 2026
+dmcli group weekend                         # weekday vs weekend dives
+dmcli group night --year 2026               # night vs day dives in 2026
 dmcli group buddy --place Tossa --limit 5   # top buddies at Tossa
 ```
 
@@ -340,7 +387,8 @@ with DiveMate("DiveMate.ddb") as db:
 
 `DiveFilter` fields mirror the CLI filters: `year`, `date_from`, `date_to`,
 `tanksize`, `place`, `country`, `buddy`, `min_depth`, `max_depth`,
-`min_divetime`, `water`. All optional; unset fields are ignored.
+`min_divetime`, `water`, `weekend`, `night`. All optional; unset fields are
+ignored (`weekend`/`night` are tri-state: `True`, `False`, or `None`).
 
 `db.dives()` also takes `order=` (any returned column, default `Divedate`) and
 `desc=` (default `False`).
@@ -351,6 +399,7 @@ with DiveMate("DiveMate.ddb") as db:
 divemate/
   __init__.py   exports DiveMate, DiveFilter
   db.py         library — data access, filtering, stats (no I/O)
+  dates.py      date/period parsing helpers (pure)
   cli.py        argparse command-line frontend
 pyproject.toml
 ```

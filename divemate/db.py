@@ -21,6 +21,8 @@ class DiveFilter:
     """
 
     year: int | None = None                 # Divedate year, e.g. 2026
+    number_from: int | None = None          # inclusive, dive Number >= this
+    number_to: int | None = None            # inclusive, dive Number <= this
     date_from: str | None = None             # inclusive, 'YYYY-MM-DD'
     date_to: str | None = None               # inclusive, 'YYYY-MM-DD'
     tanksize: float | None = None            # litres, matches any tank on the dive
@@ -33,6 +35,8 @@ class DiveFilter:
     max_depth: float | None = None           # metres
     min_divetime: float | None = None        # minutes
     water: int | None = None                 # 1=salt, 0=fresh (DiveMate convention)
+    weekend: bool | None = None              # True=Sat/Sun only, False=Mon–Fri only, None=any
+    night: bool | None = None                # True=night entry only, False=day only, None=any
     include_deleted: bool = False            # include dives DiveMate soft-deleted (Status=2)
     diver: int | None = None                 # restrict to this DiverID; None = the owner
     all_divers: bool = False                 # include every diver profile in the DB
@@ -42,6 +46,24 @@ class DiveFilter:
 # field blank. Normalize it to None so it never leaks into output or averages.
 EMPTY_SENTINEL = -300.0
 SENTINEL_COLUMNS = ("Watertemp", "Airtemp")
+
+# A dive is "night" when its entry hour is at/after NIGHT_START or before
+# NIGHT_END. Diving after 18:00 in daylight is rare enough that a fixed clock
+# cutoff beats any seasonal estimate given DiveMate's unreliable coordinates.
+NIGHT_START = 18    # 18:00
+NIGHT_END = 6       # 06:00
+
+# Entry hour as an int in SQL; empty/NULL Entrytime -> NULL (neither day nor night).
+_ENTRY_HOUR = (
+    "CASE WHEN L.Entrytime IS NULL OR L.Entrytime = '' THEN NULL "
+    "ELSE CAST(substr(L.Entrytime, 1, 2) AS INTEGER) END"
+)
+
+# Bulky/binary columns dropped from `dive_full` output (raw depth-time profiles).
+_PROFILE_COLUMNS = (
+    "Profile", "Profile2", "Profile3", "Profile4", "Profile10",
+    "tpDescent", "tpAscent",
+)
 
 # Columns returned for each dive. Keep stable: frontends depend on these keys.
 DIVE_COLUMNS = [
@@ -146,6 +168,12 @@ class DiveMate:
         if f.year is not None:
             clauses.append("L.Divedate LIKE ?")
             params.append(f"{f.year}%")
+        if f.number_from is not None:
+            clauses.append("L.Number >= ?")
+            params.append(f.number_from)
+        if f.number_to is not None:
+            clauses.append("L.Number <= ?")
+            params.append(f.number_to)
         if f.date_from is not None:
             clauses.append("L.Divedate >= ?")
             params.append(f.date_from)
@@ -193,6 +221,24 @@ class DiveMate:
         if f.water is not None:
             clauses.append("L.Water = ?")
             params.append(f.water)
+        if f.weekend is not None:
+            # strftime %w: 0=Sunday .. 6=Saturday. Weekend = Sat/Sun.
+            days = ("0", "6") if f.weekend else ("1", "2", "3", "4", "5")
+            placeholders = ", ".join("?" for _ in days)
+            clauses.append(f"strftime('%w', L.Divedate) IN ({placeholders})")
+            params.extend(days)
+        if f.night is not None:
+            if f.night:
+                clauses.append(
+                    f"({_ENTRY_HOUR} IS NOT NULL AND "
+                    f"({_ENTRY_HOUR} >= ? OR {_ENTRY_HOUR} < ?))"
+                )
+            else:
+                clauses.append(
+                    f"({_ENTRY_HOUR} IS NOT NULL AND "
+                    f"{_ENTRY_HOUR} < ? AND {_ENTRY_HOUR} >= ?)"
+                )
+            params.extend([NIGHT_START, NIGHT_END])
 
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         return where, params, needs_tank
@@ -218,6 +264,42 @@ class DiveMate:
                 if r.get(c) == EMPTY_SENTINEL:
                     r[c] = None
         return rows
+
+    def dive_full(self, number: int, diver: int | None = None,
+                  all_divers: bool = False,
+                  include_deleted: bool = False) -> list[dict[str, Any]]:
+        """Return every column of the dive(s) with this Number, plus resolved
+        tanks and buddy names. Normally one dive; a list because Number is only
+        unique per diver. Defaults to the owner's dive."""
+        clauses = ["L.Number = ?"]
+        params: list[Any] = [number]
+        if not include_deleted:
+            clauses.append("(L.Status IS NULL OR L.Status != 2)")
+        if not all_divers:
+            d = diver if diver is not None else self.owner_id()
+            if d is not None:
+                clauses.append("L.DiverID = ?")
+                params.append(d)
+        where = " WHERE " + " AND ".join(clauses)
+        rows = [dict(r) for r in
+                self.conn.execute(f"SELECT * FROM Logbook L{where}", params)]
+        for r in rows:
+            for c in SENTINEL_COLUMNS:
+                if r.get(c) == EMPTY_SENTINEL:
+                    r[c] = None
+            # drop bulky/binary dive-profile columns — not useful for `info`
+            for c in _PROFILE_COLUMNS:
+                r.pop(c, None)
+            r["tanks"] = self._tanks(r["ID"])
+            r["buddies"] = [self.buddy_names().get(b, f"#{b}")
+                            for b in self._parse_ids(r.get("BuddyIDs"))]
+        return rows
+
+    def _tanks(self, log_id: int) -> list[dict[str, Any]]:
+        """Per-dive tanks (size, gas, pressures, name), in display order."""
+        sql = ("SELECT Tanksize, O2, He, PresS, PresE, Name "
+               "FROM Tank WHERE LogID = ? ORDER BY SortOrd")
+        return [dict(r) for r in self.conn.execute(sql, (log_id,))]
 
     def count(self, f: DiveFilter | None = None) -> int:
         f = f or DiveFilter()
@@ -298,11 +380,19 @@ class DiveMate:
         key = column.strip().lower()
         if key in ("year", "año", "ano"):
             return "substr(L.Divedate,1,4)"
+        if key in ("night", "day", "nightday", "daynight"):
+            return (f"CASE WHEN {_ENTRY_HOUR} IS NULL THEN 'unknown' "
+                    f"WHEN {_ENTRY_HOUR} >= {NIGHT_START} OR {_ENTRY_HOUR} < {NIGHT_END} "
+                    f"THEN 'night' ELSE 'day' END")
         if key in ("month", "mes"):
             return "substr(L.Divedate,1,7)"
+        if key in ("weekend", "weekday", "weekends", "weekdays"):
+            return ("CASE WHEN strftime('%w',L.Divedate) IN ('0','6') "
+                    "THEN 'weekend' ELSE 'weekday' END")
         if key in _GROUPABLE_LC:
             return f"L.{_GROUPABLE_LC[key]}"
-        allowed = ", ".join(sorted(_GROUPABLE) + ["year", "month"])
+        allowed = ", ".join(sorted(_GROUPABLE) +
+                            ["year", "month", "weekend", "night", "buddy"])
         raise ValueError(f"cannot group by {column!r}. Allowed: {allowed}")
 
     def dives_per_year(self, f: DiveFilter | None = None) -> list[dict[str, Any]]:
