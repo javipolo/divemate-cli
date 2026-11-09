@@ -199,8 +199,10 @@ COLUMN_UNITS = {
     "O2": "%",
 }
 COLUMN_ROUND_INT = {"Divetime"}
-# columns where a stored 0 means "no data" and should render blank, not "0"
-COLUMN_ZERO_IS_EMPTY = {"Tanksize"}
+# columns where a stored 0 means "no data" and should render blank, not "0".
+# (Temperatures are excluded: their missing value is the -300 sentinel, so a
+# stored 0 is a genuine 0 °C.)
+COLUMN_ZERO_IS_EMPTY = {"Tanksize", "DepthAvg", "O2", "Weight"}
 
 
 def _print_table(rows: list[dict], cols: list[str],
