@@ -223,10 +223,12 @@ Tank 1         24 L  O₂ 21%  220→120 bar
 Tank 2         11 L  O₂ 50%  180→100 bar
 ```
 
-Add `-p`/`--profile` to also draw the dive's **depth profile** as an ASCII chart,
-with **temperature** overlaid when the computer logged it (depth `•`, temp `·`;
-the left axis is depth in metres, surface at the top). `--json` includes the raw
-samples under a `profile` key.
+Add `-p`/`--profile` to also draw the dive's **depth profile**, with
+**temperature** overlaid when the computer logged it. With the optional `charts`
+extra installed (`pip install divemate-cli[charts]`, pulls in `plotext`) it is a
+coloured dual-axis chart — depth in blue on the left (metres, surface at the top)
+and temperature in red on the right (°C); without it a plain ASCII chart is drawn
+instead. `--json` includes the raw samples under a `profile` key.
 
 ```console
 $ dmcli info 262 --profile

@@ -363,7 +363,8 @@ def cmd_info(db: DiveMate, a: argparse.Namespace) -> None:
         from .chart import profile_chart
         if prof:
             for line in profile_chart(prof["times"], prof["depths"],
-                                      prof["temps"]):
+                                      prof["temps"],
+                                      title=f"Dive #{a.number}"):
                 print(line)
         else:
             print("\n(no depth profile recorded for this dive)")

@@ -7,6 +7,9 @@ dependencies = []
 
 [project.optional-dependencies]
 gdrive = ["google-auth>=2.0", "requests>=2.0"]
+# coloured dual-axis profile charts for `info --profile`; without it a plain
+# ASCII chart is drawn instead. Pinned to the stable 5.x API (6.x is a rewrite).
+charts = ["plotext>=5.2,<6"]
 
 [project.scripts]
 dmcli = "divemate.cli:main"

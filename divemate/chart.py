@@ -1,9 +1,10 @@
-"""Tiny dependency-free ASCII line charts for the terminal.
+"""Terminal charts.
 
-Reusable building blocks: ``line_chart`` draws one numeric series with a labelled
-y-axis (for a future ``graph`` command), and ``profile_chart`` overlays two
-series with independent scales — used by ``info`` to draw a dive's depth profile
-together with temperature.
+``profile_chart`` draws a dive's depth profile with temperature overlaid; it uses
+the optional ``plotext`` package for a coloured, dual-axis chart (depth left in
+blue, temperature right in red) and falls back to a dependency-free ASCII grid
+when plotext is absent. ``line_chart`` is a plain-ASCII single-series helper kept
+for a future ``graph`` command.
 """
 
 from __future__ import annotations
@@ -129,22 +130,58 @@ def line_chart(xs: list[float], ys: list[float | None], *, width: int = 72,
 
 def profile_chart(times: list[float], depths: list[float],
                   temps: list[float | None] | None = None, *,
-                  width: int | None = None, height: int = 16) -> list[str]:
+                  width: int | None = None, height: int = 18,
+                  title: str | None = None) -> list[str]:
     """Depth profile (surface at top) with optional temperature overlaid.
 
-    ``times`` in minutes, ``depths`` in metres, ``temps`` in °C (same length,
-    None where missing)."""
+    Uses ``plotext`` for a coloured, dual-axis chart (depth in blue on the left,
+    temperature in red on the right) when it is installed; otherwise falls back
+    to a plain ASCII rendering. ``times`` in minutes, ``depths`` in metres,
+    ``temps`` in °C (same length, None where missing)."""
     if not depths:
         return ["(no depth profile recorded)"]
+    try:
+        import plotext as plt
+    except ImportError:
+        return _ascii_profile(times, depths, temps, width=width, height=height)
+
+    if width is None:
+        width = max(40, min(90, term_width() - 2))
+    plt.clf()
+    plt.theme("clear")
+    # negate depth so the surface (0) sits at the top; relabel ticks positive
+    plt.plot(times, [-d for d in depths], yside="left", color="blue+",
+             label="depth (m)")
+    dmax = max(depths) or 1.0
+    ticks = [dmax * i / 6 for i in range(7)]
+    plt.yticks([-t for t in ticks], [f"{t:.0f}" for t in ticks], yside="left")
+
+    have_temp = bool(temps) and any(t is not None for t in temps)
+    if have_temp:
+        xt = [x for x, t in zip(times, temps) if t is not None]  # type: ignore[arg-type]
+        yt = [t for t in temps if t is not None]                 # type: ignore[union-attr]
+        plt.plot(xt, yt, yside="right", color="red+", label="temp (°C)")
+
+    plt.xlabel("time (min)")
+    if title:
+        plt.title(title)
+    plt.plotsize(width, height)
+    out = plt.build().split("\n")
+    if have_temp:
+        out.append(f"temperature {min(yt):.1f}–{max(yt):.1f} °C")
+    return out
+
+
+def _ascii_profile(times: list[float], depths: list[float],
+                   temps: list[float | None] | None = None, *,
+                   width: int | None = None, height: int = 16) -> list[str]:
+    """Dependency-free fallback: depth silhouette with temperature overlaid."""
     if width is None:
         width = max(30, min(72, term_width() - 12))
-
-    dmax = max(depths)
-    dlo, dhi = 0.0, (dmax or 1.0)
+    dmax = max(depths) or 1.0
     grid = _Grid(width, height)
-    _plot_series(grid, _resample(times, depths, width), dlo, dhi, "•",
+    _plot_series(grid, _resample(times, depths, width), 0.0, dmax, "•",
                  top_is_min=True)
-
     have_temp = bool(temps) and any(t is not None for t in temps)
     if have_temp:
         tv = [t for t in temps if t is not None]  # type: ignore[union-attr]
@@ -153,8 +190,6 @@ def profile_chart(times: list[float], depths: list[float],
             tlo, thi = tlo - 1, thi + 1
         _plot_series(grid, _resample(times, temps, width), tlo, thi, "·",
                      top_is_min=False)
-
-    # left axis labels = depth (0 at top -> dmax at bottom)
     lab = [f"{(i / (height - 1)) * dmax:5.1f}" for i in range(height)]
     wlab = max(len(s) for s in lab)
     out = ["", "Depth profile  (• depth m" +

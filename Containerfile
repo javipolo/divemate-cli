@@ -9,8 +9,8 @@ WORKDIR /app
 # and the (large) .ddb is never baked in (also excluded via .containerignore).
 COPY pyproject.toml README.md ./
 COPY divemate ./divemate
-# include the gdrive extra so `dmcli pull` works out of the box
-RUN pip install --no-cache-dir '.[gdrive]'
+# include gdrive (`dmcli pull`) and charts (`info --profile`) extras
+RUN pip install --no-cache-dir '.[gdrive,charts]'
 
 # The wrapper mounts the host DB here read-only.
 ENV DIVEMATE_DB=/data/DiveMate.ddb
