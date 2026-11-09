@@ -8,6 +8,7 @@ series over time. Both use ``plotext``, which is a hard dependency.
 from __future__ import annotations
 
 import math
+import re
 import shutil
 
 import plotext as plt
@@ -98,15 +99,50 @@ def profile_chart(times: list[float], depths: list[float],
     xticks = _int_ticks(0, tmax, 6)
     plt.xticks(xticks, [str(t) for t in xticks])
 
-    plt.xlabel("time (min)")
+    # x-axis label is drawn by us in the footer (merged with the legend), so no
+    # plt.xlabel() here
     if title:
         plt.title(title)
     plt.plotsize(width, height)
     lines = plt.build().split("\n")
-    # our own legend (depth left, temp right) — colours match the plotext series
-    blue, red, reset = "\033[94m", "\033[91m", "\033[0m"
-    legend = f"{blue}▬ depth (m) [left]{reset}"
-    if have_temp:
-        legend += f"    {red}▬ temp (°C) [right]{reset}"
-    lines.append(legend)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    lines.extend(_profile_footer(lines, have_temp))
     return lines
+
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _profile_footer(lines: list[str], have_temp: bool) -> list[str]:
+    """Footer combining the x-axis label with the legend: depth label at the far
+    left (blue), `time (min)` centred, temperature label at the far right (red).
+    Falls back to two lines (centred label, then the labels) when it won't fit."""
+    blue, red, reset = "\033[94m", "\033[91m", "\033[0m"
+    width = max((len(_ANSI_RE.sub("", ln).rstrip()) for ln in lines), default=40)
+    left, mid = "▬ depth (m)", "time (min)"
+    right = "▬ temp (°C)" if have_temp else ""
+    lL, lC, lR = len(left), len(mid), len(right)
+
+    def colour(plain: str) -> str:
+        """Colour the first lL chars blue and the last lR chars red."""
+        tail = red + plain[width - lR:] + reset if lR else plain[width - lR:]
+        return blue + plain[:lL] + reset + plain[lL:width - lR] + tail
+
+    cstart = (width - lC) // 2
+    if cstart >= lL + 1 and cstart + lC <= width - lR - (1 if lR else 0):
+        buf = list(" " * width)
+        for i, ch in enumerate(mid):
+            buf[cstart + i] = ch
+        for i, ch in enumerate(left):
+            buf[i] = ch
+        for i, ch in enumerate(right):
+            buf[width - lR + i] = ch
+        return [colour("".join(buf))]
+    # fallback: centred label on its own line, then the labels left/right
+    buf = list(" " * width)
+    for i, ch in enumerate(left):
+        buf[i] = ch
+    for i, ch in enumerate(right):
+        buf[width - lR + i] = ch
+    return [" " * max(0, (width - lC) // 2) + mid, colour("".join(buf))]
