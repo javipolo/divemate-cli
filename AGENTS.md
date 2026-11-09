@@ -11,6 +11,9 @@ frontend-agnostic data layer (no printing); `cli.py` is the argparse frontend;
   unrelated features into one commit. Commit as each feature is finished, before
   starting the next.
 - Only commit/push when asked.
+- `completions/dmcli.bash` is generated from the CLI parser. `make hooks` installs
+  a pre-commit hook that regenerates it when `divemate/cli.py` changes; otherwise
+  run `make completion` after CLI changes.
 
 ## Sample database
 

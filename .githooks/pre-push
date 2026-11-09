@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Pass-through to the original hook (e.g. the Red Hat secret scanner), since
+# core.hooksPath makes git consult only .githooks.
+orig="$(git rev-parse --show-toplevel)/.git/hooks/${0##*/}"
+[ -x "$orig" ] && exec "$orig" "$@"
+exit 0

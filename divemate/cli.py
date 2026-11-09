@@ -380,9 +380,7 @@ GRAPH_FIELDS = {
     "time": ("Divetime", "min"),
     "watertemp": ("Watertemp", "°C"),
     "temp": ("Watertemp", "°C"),
-    "airtemp": ("Airtemp", "°C"),
     "o2": ("O2", "%"),
-    "tanksize": ("Tanksize", "L"),
     "sac": ("SAC", "L/min"),
     "rmv": ("SAC", "L/min"),
     "number": ("Number", ""),
@@ -646,7 +644,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pgr = sub.add_parser("graph", help="plot a numeric field over time (+ filters)")
     pgr.add_argument("field", help="field to plot: depth, avgdepth, divetime, "
-                     "watertemp, airtemp, o2, tanksize, sac, number")
+                     "watertemp, o2, sac, number")
     pgr.add_argument("--desc", action="store_true", help="newest first")
     _add_filter_args(pgr)
     pgr.set_defaults(func=cmd_graph)

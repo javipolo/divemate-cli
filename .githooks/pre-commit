@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Project pre-commit hook (enable with: make hooks).
+# Keeps the bash completion in sync with the CLI, then chains to any existing
+# .git/hooks/pre-commit (e.g. the Red Hat secret scanner).
+set -euo pipefail
+
+repo="$(git rev-parse --show-toplevel)"
+
+# Regenerate the completion whenever the CLI parser changed, and stage it.
+if git diff --cached --name-only | grep -qE '^divemate/cli\.py$'; then
+    ( cd "$repo" && python -m divemate.cli completion bash > completions/dmcli.bash )
+    git add "$repo/completions/dmcli.bash"
+fi
+
+# Chain to the original hook if present (hooksPath replaces .git/hooks).
+orig="$repo/.git/hooks/pre-commit"
+[ -x "$orig" ] && "$orig" "$@"
+exit 0
