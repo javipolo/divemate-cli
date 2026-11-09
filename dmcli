@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#
+# Run the divemate CLI inside a podman container, auto-mounting the DiveMate
+# logbook read-only. No local Python / dependency install needed.
+#
+# Database resolution (first that exists wins):
+#   1. $DIVEMATE_DB           (path to a .ddb file)
+#   2. ./DiveMate.ddb         (current directory)
+#
+# Build the image once:
+#   podman build -t divemate-cli /path/to/divemate-cli
+#
+# Then install this script on your PATH, e.g.:
+#   cp dmcli ~/.local/bin/ && chmod +x ~/.local/bin/dmcli
+# or alias it:
+#   alias dmcli='/path/to/divemate-cli/dmcli'
+#
+# Usage is identical to the CLI, minus --db (handled here):
+#   dmcli list --year 2026 --tank 24.0
+#   DIVEMATE_DB=~/dives/DiveMate.ddb dmcli stats --year 2026
+
+set -euo pipefail
+
+# Known config variables.
+VARS=(DIVEMATE_DB DIVEMATE_IMAGE DIVEMATE_GDRIVE_KEY DIVEMATE_GDRIVE_FOLDER DIVEMATE_GDRIVE_FILE)
+
+# Locate the config file. Prefer ~/.config/divemate-cli, fall back to the old
+# ~/.config/divemate-tool so existing setups keep working. Override with
+# $DIVEMATE_CONFIG.
+CONFIG="${DIVEMATE_CONFIG:-}"
+if [[ -z "$CONFIG" ]]; then
+	base="${XDG_CONFIG_HOME:-$HOME/.config}"
+	if [[ -f "$base/divemate-cli/config" ]]; then
+		CONFIG="$base/divemate-cli/config"
+	else
+		CONFIG="$base/divemate-tool/config"
+	fi
+fi
+if [[ -f "$CONFIG" ]]; then
+	# snapshot env-provided values so they win over the file
+	for v in "${VARS[@]}"; do
+		[[ -n "${!v+x}" ]] && eval "__env_$v=\${$v}"
+	done
+	set -a
+	# shellcheck disable=SC1090
+	source "$CONFIG"
+	set +a
+	for v in "${VARS[@]}"; do
+		n="__env_$v"
+		[[ -n "${!n+x}" ]] && eval "$v=\${$n}"
+	done
+fi
+
+IMAGE="${DIVEMATE_IMAGE:-localhost/divemate-cli:latest}"
+DB="${DIVEMATE_DB:-$PWD/DiveMate.ddb}"
+
+if ! podman image exists "$IMAGE"; then
+	echo "dmcli: image '$IMAGE' not found. Build it with:" >&2
+	echo "  podman build -t divemate-cli <path-to-repo>" >&2
+	exit 1
+fi
+
+# 'pull' downloads the DB from Google Drive: it needs a WRITABLE mount of the
+# DB's directory (the file may not exist yet) and the service-account key.
+if [[ "${1:-}" == "pull" ]]; then
+	DBDIR="$(dirname "$DB")"
+	DBNAME="$(basename "$DB")"
+	mkdir -p "$DBDIR"
+	KEY="${DIVEMATE_GDRIVE_KEY:?set DIVEMATE_GDRIVE_KEY to the service-account JSON key}"
+	KEY="$(readlink -f "$KEY")"
+	exec podman run --rm -i \
+		-v "$DBDIR:/data:Z" \
+		-v "$KEY:/key.json:ro,Z" \
+		-e DIVEMATE_DB="/data/$DBNAME" \
+		-e DIVEMATE_GDRIVE_KEY=/key.json \
+		-e DIVEMATE_GDRIVE_FOLDER \
+		-e DIVEMATE_GDRIVE_FILE \
+		"$IMAGE" "$@"
+fi
+
+# all other commands only read the DB
+if [[ ! -f "$DB" ]]; then
+	echo "dmcli: database not found: $DB" >&2
+	echo "  run 'dmcli pull' to download it, or set DIVEMATE_DB" >&2
+	exit 1
+fi
+DB="$(readlink -f "$DB")"
+
+# -v ...:ro,Z  -> read-only bind + SELinux relabel (needed on Fedora/RHEL)
+# -i           -> keep stdin so piping (e.g. | jq) works
+exec podman run --rm -i \
+	-v "$DB:/data/DiveMate.ddb:ro,Z" \
+	-e DIVEMATE_DB=/data/DiveMate.ddb \
+	"$IMAGE" "$@"

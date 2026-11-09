@@ -1,0 +1,19 @@
+[project]
+name = "divemate-cli"
+version = "0.1.0"
+description = "Query and stats CLI for DiveMate .ddb (SQLite) logbooks"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+gdrive = ["google-auth>=2.0", "requests>=2.0"]
+
+[project.scripts]
+dmcli = "divemate.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["divemate"]

@@ -1,0 +1,31 @@
+# divemate-cli configuration
+#
+# Copy to:  ~/.config/divemate-cli/config
+#   mkdir -p ~/.config/divemate-cli
+#   cp config.example ~/.config/divemate-cli/config
+#
+# This file is sourced by the `dmcli` wrapper as shell, so it is plain
+# KEY="value" lines (and you may use $HOME, command substitution, etc).
+# A variable already set in your environment overrides the value here, so you can
+# still do:  DIVEMATE_DB=/tmp/other.ddb dmcli list
+#
+# Override the config path itself with the DIVEMATE_CONFIG env var.
+
+# --- Local logbook -----------------------------------------------------------
+
+# Where your DiveMate .ddb lives (and where `pull` downloads it).
+DIVEMATE_DB="$HOME/dives/DiveMate.ddb"
+
+# Container image tag to run (rarely needed).
+#DIVEMATE_IMAGE="localhost/divemate-cli:latest"
+
+# --- Google Drive sync (used by `dmcli pull`) --------------------------------
+
+# Path to the service-account JSON key.
+DIVEMATE_GDRIVE_KEY="$HOME/.config/divemate-cli/service-account.json"
+
+# ID of the shared Drive folder (the part after /folders/ in its URL).
+DIVEMATE_GDRIVE_FOLDER="xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# Remote file name to look for in that folder (default: DiveMate.ddb).
+#DIVEMATE_GDRIVE_FILE="DiveMate.ddb"

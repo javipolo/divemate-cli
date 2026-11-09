@@ -1,0 +1,9 @@
+# never copy logbooks into the image
+*.ddb
+# python cruft
+__pycache__/
+*.pyc
+.git/
+build/
+dist/
+*.egg-info/
