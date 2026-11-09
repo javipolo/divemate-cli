@@ -327,6 +327,29 @@ $ divemate tanks
 7 11 11.1 12 12.2 13.2 15 24
 ```
 
+## Shell completion (bash)
+
+`dmcli` ships a bash completion that completes subcommands, their options and the
+value lists for `group`/`graph`. A ready-made script lives at
+[`completions/dmcli.bash`](completions/dmcli.bash).
+
+Install it by sourcing it from your `~/.bashrc`:
+
+```bash
+echo 'source /path/to/divemate-cli/completions/dmcli.bash' >> ~/.bashrc
+# or drop it where bash-completion looks:
+cp completions/dmcli.bash ~/.local/share/bash-completion/completions/dmcli
+```
+
+The script is **generated from the CLI's own argument parser**, so it never
+drifts from the code. After adding commands or flags, regenerate it with:
+
+```bash
+make completion            # writes completions/dmcli.bash
+# equivalently:
+dmcli completion bash > completions/dmcli.bash
+```
+
 ## Running in a container (podman)
 
 No local Python or dependency install needed — build an image once and drive it
