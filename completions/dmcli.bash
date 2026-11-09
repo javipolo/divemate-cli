@@ -18,7 +18,7 @@ _dmcli() {
     fi
     local opts=""
     case "$cmd" in
-    list) opts="-h --help --year --period --from --to --tank --tanksize --exclude-tank --place --country --buddy --comment --tag --min-depth --max-depth --min-divetime --min-sac --max-sac --water --weekend --weekday --night --day --include-deleted --diver --all-divers --columns --desc" ;;
+    list) opts="-h --help --year --period --from --to --tank --tanksize --exclude-tank --place --country --buddy --comment --tag --min-depth --max-depth --min-divetime --min-sac --max-sac --water --weekend --weekday --night --day --include-deleted --diver --all-divers --columns --sort --desc" ;;
     info) opts="-h --help -t --temp --diver --all-divers --include-deleted last first" ;;
     count) opts="-h --help --year --period --from --to --tank --tanksize --exclude-tank --place --country --buddy --comment --tag --min-depth --max-depth --min-divetime --min-sac --max-sac --water --weekend --weekday --night --day --include-deleted --diver --all-divers" ;;
     graph) opts="-h --help --by --desc --year --period --from --to --tank --tanksize --exclude-tank --place --country --buddy --comment --tag --min-depth --max-depth --min-divetime --min-sac --max-sac --water --weekend --weekday --night --day --include-deleted --diver --all-divers avgdepth depth depthavg divetime maxdepth rmv sac temp time watertemp count" ;;

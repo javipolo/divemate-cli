@@ -263,9 +263,30 @@ def _fmt(v) -> str:
     return str(v)
 
 
+# user alias -> dive column for `list --sort` (SAC is sorted in Python)
+SORT_FIELDS = {
+    "number": "Number", "date": "Divedate", "divedate": "Divedate",
+    "entrytime": "Entrytime", "time": "Divetime", "divetime": "Divetime",
+    "depth": "Depth", "maxdepth": "Depth", "avgdepth": "DepthAvg",
+    "depthavg": "DepthAvg", "watertemp": "Watertemp", "temp": "Watertemp",
+    "airtemp": "Airtemp", "o2": "O2", "tanksize": "Tanksize",
+    "place": "Place", "country": "Country", "sac": "SAC",
+}
+
+
 def cmd_list(db: DiveMate, a: argparse.Namespace) -> None:
     f = _filter_from_args(a)
-    rows = db.dives(f, desc=a.desc)
+    key = (a.sort or "date").strip().lower()
+    if key not in SORT_FIELDS:
+        raise ValueError(f"cannot sort by {a.sort!r}. Fields: "
+                         + ", ".join(sorted(set(SORT_FIELDS.values()))))
+    col = SORT_FIELDS[key]
+    if col == "SAC":
+        rows = db.dives(f)
+        rows.sort(key=lambda r: (r.get("SAC") is None, r.get("SAC") or 0),
+                  reverse=a.desc)
+    else:
+        rows = db.dives(f, order=col, desc=a.desc)
     if a.json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
         return
@@ -722,7 +743,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "or open-ended 100- / -130)")
     _add_filter_args(pl)
     pl.add_argument("--columns", help="comma-separated column list")
-    pl.add_argument("--desc", action="store_true", help="newest first")
+    pl.add_argument("--sort", metavar="FIELD",
+                    help="sort by: date (default), number, depth, avgdepth, "
+                         "divetime, watertemp, tanksize, sac, place, country")
+    pl.add_argument("--desc", action="store_true",
+                    help="descending order (default ascending; newest first for date)")
     pl.set_defaults(func=cmd_list)
 
     pi = sub.add_parser("info", help="show every detail of one dive by its number")
