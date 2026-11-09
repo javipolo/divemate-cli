@@ -203,19 +203,20 @@ def profile_chart(times: list[float], depths: list[float],
     plt.theme("clear")
 
     # draw temperature FIRST so depth is plotted on top of it (plotext lets the
-    # last series win a shared cell) — depth must stay readable where they cross
+    # last series win a shared cell) — depth must stay readable where they cross.
+    # plotext ties legend order to draw order, so disable its legend (label=None)
+    # and render our own below, in the natural depth-left / temp-right order.
     have_temp = show_temp and bool(temps) and any(t is not None for t in temps)
     if have_temp:
         xt = [x for x, t in zip(times, temps) if t is not None]  # type: ignore[arg-type]
         yt = [t for t in temps if t is not None]                 # type: ignore[union-attr]
-        plt.plot(xt, yt, yside="right", color="red+", label="temp (°C)")
+        plt.plot(xt, yt, yside="right", color="red+")
         import math
         tticks = _int_ticks(math.floor(min(yt)), math.ceil(max(yt)), 7)
         plt.yticks(tticks, [str(t) for t in tticks], yside="right")
 
     # negate depth so the surface (0) sits at the top; relabel ticks positive
-    plt.plot(times, [-d for d in depths], yside="left", color="blue+",
-             label="depth (m)")
+    plt.plot(times, [-d for d in depths], yside="left", color="blue+")
 
     # all axes use whole-number ticks (the dive computer has no decimals)
     dmax = int(max(depths)) or 1
@@ -230,7 +231,14 @@ def profile_chart(times: list[float], depths: list[float],
     if title:
         plt.title(title)
     plt.plotsize(width, height)
-    return plt.build().split("\n")
+    lines = plt.build().split("\n")
+    # our own legend (depth left, temp right) — colours match the plotext series
+    blue, red, reset = "\033[94m", "\033[91m", "\033[0m"
+    legend = f"{blue}▬ depth (m) [left]{reset}"
+    if have_temp:
+        legend += f"    {red}▬ temp (°C) [right]{reset}"
+    lines.append(legend)
+    return lines
 
 
 def _ascii_profile(times: list[float], depths: list[float],
