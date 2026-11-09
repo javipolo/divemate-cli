@@ -341,16 +341,31 @@ def _print_dive(r: dict) -> None:
 
 
 def cmd_info(db: DiveMate, a: argparse.Namespace) -> None:
-    rows = db.dive_full(a.number, diver=a.diver, all_divers=a.all_divers,
+    tok = str(a.number).strip().lower()
+    if tok in ("last", "latest"):
+        number = db.boundary_number(True, diver=a.diver, all_divers=a.all_divers,
+                                    include_deleted=a.include_deleted)
+    elif tok in ("first", "oldest"):
+        number = db.boundary_number(False, diver=a.diver, all_divers=a.all_divers,
+                                    include_deleted=a.include_deleted)
+    else:
+        try:
+            number = int(a.number)
+        except ValueError:
+            raise ValueError(f"invalid dive {a.number!r} (a number, 'last' or 'first')")
+    if number is None:
+        print("no dives")
+        return
+    rows = db.dive_full(number, diver=a.diver, all_divers=a.all_divers,
                         include_deleted=a.include_deleted)
-    prof = db.dive_profile(a.number, diver=a.diver, all_divers=a.all_divers)
+    prof = db.dive_profile(number, diver=a.diver, all_divers=a.all_divers)
     if a.json:
         for r in rows:
             r["profile"] = prof
         print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
         return
     if not rows:
-        print(f"no dive #{a.number}")
+        print(f"no dive #{number}")
         return
     for i, r in enumerate(rows):
         if i:
@@ -359,14 +374,14 @@ def cmd_info(db: DiveMate, a: argparse.Namespace) -> None:
     from .chart import profile_chart
     if prof:
         place = rows[0].get("Place")
-        title = f"Dive #{a.number}" + (f" - {place}" if place else "")
+        title = f"Dive #{number}" + (f" - {place}" if place else "")
         for line in profile_chart(prof["times"], prof["depths"], prof["temps"],
                                   show_temp=a.temp, title=title):
             print(line)
     else:
         print("\n(no depth profile recorded for this dive)")
     if len(rows) > 1:
-        print(f"\n({len(rows)} dives share #{a.number} — "
+        print(f"\n({len(rows)} dives share #{number} — "
               f"use --diver ID to pick one)")
 
 
@@ -621,7 +636,8 @@ def _bash_completion_script() -> str:
     from .db import _GROUPABLE
     positional = {
         "group": sorted(_GROUPABLE) + ["year", "month", "weekend", "night", "buddy"],
-        "graph": sorted(GRAPH_FIELDS),
+        "graph": sorted(GRAPH_FIELDS) + ["count"],
+        "info": ["last", "first"],
         "completion": ["bash"],
     }
     cases = []
@@ -688,7 +704,8 @@ def build_parser() -> argparse.ArgumentParser:
     pl.set_defaults(func=cmd_list)
 
     pi = sub.add_parser("info", help="show every detail of one dive by its number")
-    pi.add_argument("number", type=int, help="dive number, e.g. 501")
+    pi.add_argument("number", metavar="N",
+                    help="dive number (e.g. 501), or 'last' / 'first'")
     pi.add_argument("-t", "--temp", action="store_true",
                     help="also plot temperature on the depth profile")
     pi.add_argument("--diver", type=int, metavar="ID",

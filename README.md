@@ -246,6 +246,9 @@ $ dmcli info 709 --temp
                             time (min)
 ```
 
+Instead of a number you can pass `last` (the highest-numbered dive) or `first`,
+e.g. `dmcli info last`.
+
 A dive number is only unique per diver; if several profiles share it, all are
 shown — pass `--diver ID` (see `dmcli divers`) to pick one.
 

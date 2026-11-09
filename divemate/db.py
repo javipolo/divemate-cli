@@ -378,6 +378,25 @@ class DiveMate:
         return {"interval": interval, "times": times,
                 "depths": depths, "temps": temps}
 
+    def boundary_number(self, last: bool = True, diver: int | None = None,
+                        all_divers: bool = False,
+                        include_deleted: bool = False) -> int | None:
+        """Highest (``last``) or lowest dive Number, for the owner by default."""
+        clauses: list[str] = []
+        params: list[Any] = []
+        if not include_deleted:
+            clauses.append("(L.Status IS NULL OR L.Status != 2)")
+        if not all_divers:
+            d = diver if diver is not None else self.owner_id()
+            if d is not None:
+                clauses.append("L.DiverID = ?")
+                params.append(d)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        agg = "MAX" if last else "MIN"
+        row = self.conn.execute(
+            f"SELECT {agg}(L.Number) FROM Logbook L{where}", params).fetchone()
+        return row[0] if row else None
+
     def _tanks(self, log_id: int) -> list[dict[str, Any]]:
         """Per-dive tanks (size, gas, pressures, name), in display order."""
         sql = ("SELECT Tanksize, O2, He, PresS, PresE, Name "
