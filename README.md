@@ -223,22 +223,25 @@ Tank 1         24 L  O₂ 21%  220→120 bar
 Tank 2         11 L  O₂ 50%  180→100 bar
 ```
 
-Add `-p`/`--profile` to also draw the dive's **depth profile**, with
-**temperature** overlaid when the computer logged it. With the optional `charts`
-extra installed (`pip install divemate-cli[charts]`, pulls in `plotext`) it is a
-coloured dual-axis chart — depth in blue on the left (metres, surface at the top)
-and temperature in red on the right (°C); without it a plain ASCII chart is drawn
-instead. `--json` includes the raw samples under a `profile` key.
+`info` always draws the dive's **depth profile** below the details. Add `-t`/
+`--temp` to also overlay **temperature** (when the computer logged it). With the
+optional `charts` extra installed (`pip install divemate-cli[charts]`, pulls in
+`plotext`) it is a coloured chart — depth in blue on the left axis (metres,
+surface at the top), and with `--temp` temperature in red on its own right axis
+(°C); without the extra a plain ASCII chart is drawn instead. `--json` includes
+the raw samples under a `profile` key.
 
 ```console
-$ dmcli info 262 --profile
+$ dmcli info 709 --temp
 ...
-Depth profile  (• depth m   · temp °C)
-  0.0 │··                                                        ••
+                     Dive #709 - Shark and Yolanda Reef
+ 0┤ L ▞▞ depth (m)                                               ▐▀├30
+  │ ⅃ ▞▞ temp (°C)                                              ▗▌ │
  ...
- 52.2 │       •• ···     ···
-      └──────────────────────────────────────────────────────────
-       0 … 68 min      temp 14.0–24.0 °C
+30┤       ▚▟▀▝█▄▌ ▝▟  ▐▟▜                                          ├24
+  └┬───────────────┬───────────────┬───────────────┬────────────┘
+   0              14              28              42           56
+                            time (min)
 ```
 
 A dive number is only unique per diver; if several profiles share it, all are

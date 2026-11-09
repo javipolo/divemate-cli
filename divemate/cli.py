@@ -343,13 +343,10 @@ def _print_dive(r: dict) -> None:
 def cmd_info(db: DiveMate, a: argparse.Namespace) -> None:
     rows = db.dive_full(a.number, diver=a.diver, all_divers=a.all_divers,
                         include_deleted=a.include_deleted)
-    prof = None
-    if a.profile:
-        prof = db.dive_profile(a.number, diver=a.diver, all_divers=a.all_divers)
+    prof = db.dive_profile(a.number, diver=a.diver, all_divers=a.all_divers)
     if a.json:
-        if a.profile:
-            for r in rows:
-                r["profile"] = prof
+        for r in rows:
+            r["profile"] = prof
         print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
         return
     if not rows:
@@ -359,15 +356,15 @@ def cmd_info(db: DiveMate, a: argparse.Namespace) -> None:
         if i:
             print("\n" + "-" * 40)
         _print_dive(r)
-    if a.profile:
-        from .chart import profile_chart
-        if prof:
-            for line in profile_chart(prof["times"], prof["depths"],
-                                      prof["temps"],
-                                      title=f"Dive #{a.number}"):
-                print(line)
-        else:
-            print("\n(no depth profile recorded for this dive)")
+    from .chart import profile_chart
+    if prof:
+        place = rows[0].get("Place")
+        title = f"Dive #{a.number}" + (f" - {place}" if place else "")
+        for line in profile_chart(prof["times"], prof["depths"], prof["temps"],
+                                  show_temp=a.temp, title=title):
+            print(line)
+    else:
+        print("\n(no depth profile recorded for this dive)")
     if len(rows) > 1:
         print(f"\n({len(rows)} dives share #{a.number} — "
               f"use --diver ID to pick one)")
@@ -500,8 +497,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     pi = sub.add_parser("info", help="show every detail of one dive by its number")
     pi.add_argument("number", type=int, help="dive number, e.g. 501")
-    pi.add_argument("-p", "--profile", action="store_true",
-                    help="also draw the depth (and temperature) profile")
+    pi.add_argument("-t", "--temp", action="store_true",
+                    help="also plot temperature on the depth profile")
     pi.add_argument("--diver", type=int, metavar="ID",
                     help="pick a diver if a number is shared (default: the owner)")
     pi.add_argument("--all-divers", action="store_true",

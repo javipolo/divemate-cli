@@ -141,10 +141,11 @@ def line_chart(xs: list[float], ys: list[float | None], *, width: int = 72,
 
 def profile_chart(times: list[float], depths: list[float],
                   temps: list[float | None] | None = None, *,
-                  width: int | None = None, height: int = 18,
-                  title: str | None = None) -> list[str]:
-    """Depth profile (surface at top) with optional temperature overlaid.
+                  show_temp: bool = False, width: int | None = None,
+                  height: int = 18, title: str | None = None) -> list[str]:
+    """Depth profile (surface at top), optionally overlaying temperature.
 
+    Temperature is only drawn when ``show_temp`` is true and the dive logged it.
     Uses ``plotext`` for a coloured, dual-axis chart (depth in blue on the left,
     temperature in red on the right) when it is installed; otherwise falls back
     to a plain ASCII rendering. ``times`` in minutes, ``depths`` in metres,
@@ -154,7 +155,8 @@ def profile_chart(times: list[float], depths: list[float],
     try:
         import plotext as plt
     except ImportError:
-        return _ascii_profile(times, depths, temps, width=width, height=height)
+        return _ascii_profile(times, depths, temps, show_temp=show_temp,
+                              width=width, height=height)
 
     if width is None:
         width = max(40, min(90, term_width() - 2))
@@ -173,7 +175,7 @@ def profile_chart(times: list[float], depths: list[float],
     xticks = _int_ticks(0, tmax, 6)
     plt.xticks(xticks, [str(t) for t in xticks])
 
-    have_temp = bool(temps) and any(t is not None for t in temps)
+    have_temp = show_temp and bool(temps) and any(t is not None for t in temps)
     if have_temp:
         xt = [x for x, t in zip(times, temps) if t is not None]  # type: ignore[arg-type]
         yt = [t for t in temps if t is not None]                 # type: ignore[union-attr]
@@ -191,15 +193,16 @@ def profile_chart(times: list[float], depths: list[float],
 
 def _ascii_profile(times: list[float], depths: list[float],
                    temps: list[float | None] | None = None, *,
-                   width: int | None = None, height: int = 16) -> list[str]:
-    """Dependency-free fallback: depth silhouette with temperature overlaid."""
+                   show_temp: bool = False, width: int | None = None,
+                   height: int = 16) -> list[str]:
+    """Dependency-free fallback: depth silhouette, temperature when requested."""
     if width is None:
         width = max(30, min(72, term_width() - 12))
     dmax = max(depths) or 1.0
     grid = _Grid(width, height)
     _plot_series(grid, _resample(times, depths, width), 0.0, dmax, "•",
                  top_is_min=True)
-    have_temp = bool(temps) and any(t is not None for t in temps)
+    have_temp = show_temp and bool(temps) and any(t is not None for t in temps)
     if have_temp:
         tv = [t for t in temps if t is not None]  # type: ignore[union-attr]
         tlo, thi = min(tv), max(tv)
