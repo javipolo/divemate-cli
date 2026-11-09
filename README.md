@@ -258,18 +258,24 @@ by its dive number.
 
 ```console
 $ dmcli info 262
-Dive #         262
-Date           15-08-2021
-Entry time     09:30:00
-Country        Spain
-Place          Begur. Furió Fitó
-Dive time      67.3 min
-Max depth      52.5 m
-Avg depth      20.4 m
-SAC (RMV)      16 L/min
-...
-Tank 1         24 L  O₂ 21%  220→120 bar
-Tank 2         11 L  O₂ 50%  180→100 bar
+262 - Begur. Furió Fitó
+───────────────────────────
+Date          15-08-2021
+Entry time    09:30:00
+───────────────────────────
+Place         Begur. Furió Fitó
+Region        Catalunya
+Country       Spain
+Buddies       Angel Caldo
+───────────────────────────
+Dive time     67.3 min
+Max depth     52.5 m
+Avg depth     20.4 m
+Water temp    14 °C
+───────────────────────────
+Tank 1        24 L  O₂ 21%  220→120 bar
+Tank 2        11 L  O₂ 50%  180→100 bar
+SAC (RMV)     16 L/min
 ```
 
 `info` always draws the dive's **depth profile** below the details, with
@@ -281,7 +287,7 @@ key.
 ```console
 $ dmcli info 709
 ...
-                     Dive #709 - Shark and Yolanda Reef
+                     709 - Shark and Yolanda Reef
  0┤▀▀▀▀▚▖                                                        ▐▀├30
   │     ▜▖                                                      ▗▌ │
  ...

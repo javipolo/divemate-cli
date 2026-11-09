@@ -312,7 +312,6 @@ def cmd_list(db: DiveMate, a: argparse.Namespace) -> None:
 # Each entry is (label, column, unit); "Buddies" and "Tanks" are rendered
 # specially from the dive's resolved buddy list and tanks.
 _INFO_SECTIONS = [
-    [("Dive #", "Number", "")],
     [("Date", "Divedate", ""),
      ("Entry time", "Entrytime", "")],
     [("Place", "Place", ""),
@@ -384,14 +383,21 @@ def _print_dive(r: dict) -> None:
         if lines:
             rendered.append(lines)
 
-    for i, lines in enumerate(rendered):
-        if i:
-            print(_info_rule())
+    print(_dive_title(r))
+    for lines in rendered:
+        print(_info_rule())
         for line in lines:
             print(line)
     if r.get("Comments"):
         print(_info_rule())
         print(r["Comments"])
+
+
+def _dive_title(r: dict) -> str:
+    """'<number> - <place>' header for a dive (number alone if no place)."""
+    num = str(r.get("Number") or "").strip()
+    place = (r.get("Place") or "").strip()
+    return f"{num} - {place}" if (num and place) else (num or place)
 
 
 def cmd_info(db: DiveMate, a: argparse.Namespace) -> None:
@@ -427,8 +433,7 @@ def cmd_info(db: DiveMate, a: argparse.Namespace) -> None:
         _print_dive(r)
     from .chart import profile_chart
     if prof:
-        place = rows[0].get("Place")
-        title = f"Dive #{number}" + (f" - {place}" if place else "")
+        title = _dive_title(rows[0])
         print()   # blank line to separate the chart from the dive details
         for line in profile_chart(prof["times"], prof["depths"], prof["temps"],
                                   title=title):
