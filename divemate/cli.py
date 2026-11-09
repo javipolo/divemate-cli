@@ -370,6 +370,73 @@ def cmd_info(db: DiveMate, a: argparse.Namespace) -> None:
               f"use --diver ID to pick one)")
 
 
+# numeric fields that `graph` can plot: user alias -> (row key, unit)
+GRAPH_FIELDS = {
+    "depth": ("Depth", "m"),
+    "maxdepth": ("Depth", "m"),
+    "avgdepth": ("DepthAvg", "m"),
+    "depthavg": ("DepthAvg", "m"),
+    "divetime": ("Divetime", "min"),
+    "time": ("Divetime", "min"),
+    "watertemp": ("Watertemp", "°C"),
+    "temp": ("Watertemp", "°C"),
+    "airtemp": ("Airtemp", "°C"),
+    "o2": ("O2", "%"),
+    "tanksize": ("Tanksize", "L"),
+    "sac": ("SAC", "L/min"),
+    "rmv": ("SAC", "L/min"),
+    "number": ("Number", ""),
+}
+
+
+def cmd_graph(db: DiveMate, a: argparse.Namespace) -> None:
+    key = a.field.strip().lower()
+    if key not in GRAPH_FIELDS:
+        raise ValueError(f"cannot graph {a.field!r}. Fields: "
+                         + ", ".join(sorted(set(f for f, _ in GRAPH_FIELDS.values()))))
+    col, unit = GRAPH_FIELDS[key]
+    rows = db.dives(_filter_from_args(a), order="Divedate", desc=a.desc)
+    # value per dive; a 0 that means "no data" becomes a gap
+    ys: list[float | None] = []
+    for r in rows:
+        v = r.get(col)
+        if v in (None, "") or (col in COLUMN_ZERO_IS_EMPTY and v == 0):
+            ys.append(None)
+        else:
+            ys.append(v)
+    pairs = [{"date": r["Divedate"], "number": r["Number"], "value": y}
+             for r, y in zip(rows, ys)]
+    if a.json:
+        print(json.dumps(pairs, ensure_ascii=False, indent=2))
+        return
+    if not any(y is not None for y in ys):
+        print("(no data to plot)")
+        return
+    xs = list(range(len(rows)))
+    xticks = _date_xticks(rows)
+    from .chart import series_chart
+    title = f"{col} — {_describe_filters(a)}"
+    for line in series_chart(xs, ys, title=title, ylabel=f"{col} ({unit})" if unit
+                             else col, xticks=xticks):
+        print(line)
+
+
+def _date_xticks(rows: list[dict], n: int = 6) -> list[tuple[float, str]]:
+    """Pick ~n evenly spaced row indices, labelled with their dive date."""
+    if not rows:
+        return []
+    idx = sorted({round(i * (len(rows) - 1) / max(1, n - 1)) for i in range(n)})
+    out = []
+    for i in idx:
+        iso = rows[i].get("Divedate") or ""
+        label = iso
+        if len(iso) == 10:  # YYYY-MM-DD -> DD-MM-YY
+            y, m, d = iso.split("-")
+            label = f"{d}-{m}-{y[2:]}"
+        out.append((float(i), label))
+    return out
+
+
 def cmd_count(db: DiveMate, a: argparse.Namespace) -> None:
     print(db.count(_filter_from_args(a)))
 
@@ -510,6 +577,13 @@ def build_parser() -> argparse.ArgumentParser:
     pc = sub.add_parser("count", help="count matching dives")
     _add_filter_args(pc)
     pc.set_defaults(func=cmd_count)
+
+    pgr = sub.add_parser("graph", help="plot a numeric field over time (+ filters)")
+    pgr.add_argument("field", help="field to plot: depth, avgdepth, divetime, "
+                     "watertemp, airtemp, o2, tanksize, sac, number")
+    pgr.add_argument("--desc", action="store_true", help="newest first")
+    _add_filter_args(pgr)
+    pgr.set_defaults(func=cmd_graph)
 
     ps = sub.add_parser("stats", help="aggregate stats over matching dives")
     _add_filter_args(ps)

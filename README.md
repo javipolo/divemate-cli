@@ -100,6 +100,7 @@ Run `divemate <command> --help` for the full option list of any command.
 | `list`  | List dives matching the filters (optional `N-M` number range) |
 | `info`  | Show every detail of one dive by its number |
 | `count` | Count matching dives |
+| `graph` | Plot a numeric field over time |
 | `stats` | Aggregate statistics over matching dives |
 | `group` | Count dives grouped by a column, ranked |
 | `years` | Dive count per year |
@@ -258,6 +259,23 @@ avg_divetime_min       99.8
 max_depth_m            29.1
 avg_depth_m            25
 avg_watertemp_c        17.7
+```
+
+### `graph`
+
+Plots a numeric field across the matching dives in date order (x axis labelled
+with dive dates, y axis the field). Accepts all the same filters as `list`.
+Fields: `depth`, `avgdepth`, `divetime`, `watertemp`, `airtemp`, `o2`,
+`tanksize`, `sac`, `number`.
+
+With the `charts` extra (`plotext`) it is a coloured line chart; otherwise a
+plain ASCII chart. `--json` prints the `{date, number, value}` points instead.
+Dives missing the field (or with a 0 that means "no data") leave a gap.
+
+```bash
+dmcli graph sac --year 2024              # how your air consumption trends
+dmcli graph depth --place Tossa          # max depth per dive at a site
+dmcli graph watertemp                    # water temperature over your whole log
 ```
 
 ### `group`

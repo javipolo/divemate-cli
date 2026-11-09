@@ -139,6 +139,41 @@ def line_chart(xs: list[float], ys: list[float | None], *, width: int = 72,
     return out
 
 
+def series_chart(xs: list[float], ys: list[float | None], *,
+                 title: str | None = None, ylabel: str = "",
+                 xticks: list[tuple[float, str]] | None = None,
+                 color: str = "cyan+", width: int | None = None,
+                 height: int = 18) -> list[str]:
+    """Plot one numeric series. Uses plotext when available (coloured line with
+    custom x tick labels), else the plain ASCII ``line_chart``.
+
+    ``xticks`` is a list of (x position, label) for the x axis (e.g. dates)."""
+    vals = [v for v in ys if v is not None]
+    if not vals:
+        return ["(no data to plot)"]
+    try:
+        import plotext as plt
+    except ImportError:
+        return line_chart(xs, ys, width=width or 72, height=height,
+                          unit=ylabel, title=title)
+    if width is None:
+        width = max(40, min(100, term_width() - 2))
+    # plotext can't skip None; plot only the present points
+    px = [x for x, v in zip(xs, ys) if v is not None]
+    py = [v for v in ys if v is not None]
+    plt.clf()
+    plt.theme("clear")
+    plt.plot(px, py, color=color, label=ylabel or None)
+    if xticks:
+        pos = [p for p, _ in xticks]
+        lab = [l for _, l in xticks]
+        plt.xticks(pos, lab)
+    if title:
+        plt.title(title)
+    plt.plotsize(width, height)
+    return plt.build().split("\n")
+
+
 def profile_chart(times: list[float], depths: list[float],
                   temps: list[float | None] | None = None, *,
                   show_temp: bool = False, width: int | None = None,
