@@ -339,6 +339,45 @@ class DiveMate:
                             for b in self._parse_ids(r.get("BuddyIDs"))]
         return rows
 
+    def dive_profile(self, number: int, diver: int | None = None,
+                     all_divers: bool = False) -> dict[str, Any] | None:
+        """Sampled depth (and temperature) profile for a dive, or None.
+
+        DiveMate stores samples as fixed-width digit runs: `Profile` holds depth
+        in 12-char records (first 4 digits = depth in decimetres), `Profile2`
+        holds temperature in 11-char records (first 4 digits = centi-°C).
+        `ProfileInt` is the sample interval in seconds. Returns a dict with
+        `times` (minutes), `depths` (m) and `temps` (°C or None per sample)."""
+        clauses = ["L.Number = ?"]
+        params: list[Any] = [number]
+        if not all_divers:
+            d = diver if diver is not None else self.owner_id()
+            if d is not None:
+                clauses.append("L.DiverID = ?")
+                params.append(d)
+        row = self.conn.execute(
+            "SELECT ProfileInt, Profile, Profile2 FROM Logbook L WHERE "
+            + " AND ".join(clauses), params).fetchone()
+        if row is None:
+            return None
+        interval = row["ProfileInt"] or 0
+        prof = row["Profile"] or ""
+        if interval <= 0 or len(prof) < 12 or len(prof) % 12 != 0:
+            return None
+        depths = [int(prof[i:i + 4]) / 10.0 for i in range(0, len(prof), 12)]
+        times = [i * interval / 60.0 for i in range(len(depths))]
+
+        temps: list[float | None] | None = None
+        p2 = row["Profile2"] or ""
+        if p2 and len(p2) % 11 == 0 and len(p2) // 11 == len(depths):
+            raw = [int(p2[i:i + 4]) for i in range(0, len(p2), 11)]
+            # 0 is DiveMate's "no sample"; keep only plausible temperatures
+            t = [v / 100.0 if v and -500 < v < 6000 else None for v in raw]
+            if any(x is not None for x in t):
+                temps = t
+        return {"interval": interval, "times": times,
+                "depths": depths, "temps": temps}
+
     def _tanks(self, log_id: int) -> list[dict[str, Any]]:
         """Per-dive tanks (size, gas, pressures, name), in display order."""
         sql = ("SELECT Tanksize, O2, He, PresS, PresE, Name "

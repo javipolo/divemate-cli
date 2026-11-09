@@ -223,6 +223,22 @@ Tank 1         24 L  O₂ 21%  220→120 bar
 Tank 2         11 L  O₂ 50%  180→100 bar
 ```
 
+Add `-p`/`--profile` to also draw the dive's **depth profile** as an ASCII chart,
+with **temperature** overlaid when the computer logged it (depth `•`, temp `·`;
+the left axis is depth in metres, surface at the top). `--json` includes the raw
+samples under a `profile` key.
+
+```console
+$ dmcli info 262 --profile
+...
+Depth profile  (• depth m   · temp °C)
+  0.0 │··                                                        ••
+ ...
+ 52.2 │       •• ···     ···
+      └──────────────────────────────────────────────────────────
+       0 … 68 min      temp 14.0–24.0 °C
+```
+
 A dive number is only unique per diver; if several profiles share it, all are
 shown — pass `--diver ID` (see `dmcli divers`) to pick one.
 
