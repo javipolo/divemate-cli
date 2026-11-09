@@ -5,15 +5,13 @@ description = "Query and stats CLI for DiveMate .ddb (SQLite) logbooks"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
-# lark powers the `--query` filter language (parser frontend)
-dependencies = ["lark>=1.2"]
+# lark powers the `--query` filter language (parser frontend); plotext draws the
+# coloured terminal charts (pinned to the stable 5.x API — 6.x is a rewrite)
+dependencies = ["lark>=1.2", "plotext>=5.2,<6"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
 gdrive = ["google-auth>=2.0", "requests>=2.0"]
-# coloured dual-axis profile charts for `info --profile`; without it a plain
-# ASCII chart is drawn instead. Pinned to the stable 5.x API (6.x is a rewrite).
-charts = ["plotext>=5.2,<6"]
 
 [project.scripts]
 dmcli = "divemate.cli:main"

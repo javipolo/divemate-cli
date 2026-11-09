@@ -30,7 +30,8 @@ Number  Divedate    Place                             Depth   Divetime  Tanksize
 - Group and rank dives by site, country, region, buddy, computer, suit, week, …
 - Terminal charts: a field over time, or dives per week/month/year.
 - Machine-readable `--json` output on every command, for scripts or a future UI.
-- Python 3.10+; the only runtime dependency is `lark` (the query parser).
+- Python 3.10+; runtime dependencies are `lark` (the query parser) and
+  `plotext` (the terminal charts).
 - Read-only access: the tool never writes to your logbook.
 
 ## Installation
@@ -271,25 +272,24 @@ Tank 1         24 L  O₂ 21%  220→120 bar
 Tank 2         11 L  O₂ 50%  180→100 bar
 ```
 
-`info` always draws the dive's **depth profile** below the details. Add `-t`/
-`--temp` to also overlay **temperature** (when the computer logged it). With the
-optional `charts` extra installed (`pip install divemate-cli[charts]`, pulls in
-`plotext`) it is a coloured chart — depth in blue on the left axis (metres,
-surface at the top), and with `--temp` temperature in red on its own right axis
-(°C); without the extra a plain ASCII chart is drawn instead. `--json` includes
-the raw samples under a `profile` key.
+`info` always draws the dive's **depth profile** below the details, with
+**temperature** overlaid when the computer logged it: depth in blue on the left
+axis (metres, surface at the top) and temperature in red on its own right axis
+(°C), with a legend below. `--json` includes the raw samples under a `profile`
+key.
 
 ```console
-$ dmcli info 709 --temp
+$ dmcli info 709
 ...
                      Dive #709 - Shark and Yolanda Reef
- 0┤ L ▞▞ depth (m)                                               ▐▀├30
-  │ ⅃ ▞▞ temp (°C)                                              ▗▌ │
+ 0┤▀▀▀▀▚▖                                                        ▐▀├30
+  │     ▜▖                                                      ▗▌ │
  ...
 30┤       ▚▟▀▝█▄▌ ▝▟  ▐▟▜                                          ├24
   └┬───────────────┬───────────────┬───────────────┬────────────┘
    0              14              28              42           56
                             time (min)
+▬ depth (m) [left]    ▬ temp (°C) [right]
 ```
 
 Instead of a number you can pass `last` (the highest-numbered dive) or `first`,
@@ -323,8 +323,8 @@ with empty periods shown as 0 (weeks are labelled by their ISO Monday). Combine
 with any query — e.g. dives with a buddy over time. The x axis spans the first to
 the last dive that matches (constrain it with a `date`/`period` query).
 
-With the `charts` extra (`plotext`) it is a coloured line chart; otherwise a
-plain ASCII chart. `--json` prints the `{date, number, value}` points instead.
+It is a coloured line chart (via `plotext`). `--json` prints the `{date, number,
+value}` points instead.
 Dives missing the field (or with a 0 that means "no data") leave a gap.
 
 ```bash

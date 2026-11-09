@@ -19,7 +19,7 @@ _dmcli() {
     local opts=""
     case "$cmd" in
     list) opts="-h --help -q --query --include-deleted --diver --all-divers --columns" ;;
-    info) opts="-h --help -t --temp --diver --all-divers --include-deleted last first" ;;
+    info) opts="-h --help --diver --all-divers --include-deleted last first" ;;
     count) opts="-h --help -q --query --include-deleted --diver --all-divers" ;;
     graph) opts="-h --help --by --desc -q --query --include-deleted --diver --all-divers avgdepth depth depthavg divetime maxdepth rmv sac temp time watertemp count" ;;
     stats) opts="-h --help -q --query --include-deleted --diver --all-divers" ;;

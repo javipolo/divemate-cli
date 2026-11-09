@@ -429,8 +429,9 @@ def cmd_info(db: DiveMate, a: argparse.Namespace) -> None:
     if prof:
         place = rows[0].get("Place")
         title = f"Dive #{number}" + (f" - {place}" if place else "")
+        print()   # blank line to separate the chart from the dive details
         for line in profile_chart(prof["times"], prof["depths"], prof["temps"],
-                                  show_temp=a.temp, title=title):
+                                  title=title):
             print(line)
     else:
         print("\n(no depth profile recorded for this dive)")
@@ -767,8 +768,6 @@ def build_parser() -> argparse.ArgumentParser:
     pi = sub.add_parser("info", help="show every detail of one dive by its number")
     pi.add_argument("number", metavar="N",
                     help="dive number (e.g. 501), or 'last' / 'first'")
-    pi.add_argument("-t", "--temp", action="store_true",
-                    help="also plot temperature on the depth profile")
     pi.add_argument("--diver", type=int, metavar="ID",
                     help="pick a diver if a number is shared (default: the owner)")
     pi.add_argument("--all-divers", action="store_true",
