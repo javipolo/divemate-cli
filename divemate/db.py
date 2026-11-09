@@ -34,6 +34,8 @@ class DiveFilter:
     min_depth: float | None = None           # metres
     max_depth: float | None = None           # metres
     min_divetime: float | None = None        # minutes
+    min_sac: float | None = None             # L/min, SAC (RMV) >= this
+    max_sac: float | None = None             # L/min, SAC (RMV) <= this
     water: int | None = None                 # 1=salt, 0=fresh (DiveMate convention)
     weekend: bool | None = None              # True=Sat/Sun only, False=Mon–Fri only, None=any
     night: bool | None = None                # True=night entry only, False=day only, None=any
@@ -86,6 +88,7 @@ class DiveMate:
         self.conn.row_factory = sqlite3.Row
         self._owner: int | None = None
         self._buddies: dict[int, str] | None = None
+        self._sac: dict[int, float] | None = None
 
     def buddy_names(self) -> dict[int, str]:
         """Map Buddy.ID -> display name (cached). Buddies live in their own table;
@@ -97,6 +100,34 @@ class DiveMate:
                                 if x and x.strip())
                 self._buddies[r["ID"]] = name or f"#{r['ID']}"
         return self._buddies
+
+    def sac(self) -> dict[int, float]:
+        """Map dive ID -> SAC (a.k.a. RMV) in L/min, surface-equivalent.
+
+        SAC = gas used / (dive time x mean ATA), where gas used (litres) is
+        summed over the dive's tanks as (start - end pressure) x tank size, and
+        mean ATA = DepthAvg / 10 + 1. Only dives with a usable pressure drop,
+        a positive dive time and a recorded average depth get a value. Cached.
+
+        Strictly this is RMV (volume-based); we call it SAC because that's the
+        name divers commonly use.
+        """
+        if self._sac is None:
+            gas: dict[int, float] = {}
+            for r in self.conn.execute(
+                    "SELECT LogID, PresS, PresE, Tanksize FROM Tank"):
+                ps, pe, ts = r["PresS"], r["PresE"], r["Tanksize"]
+                if ts and ps is not None and pe is not None and ps > pe:
+                    gas[r["LogID"]] = gas.get(r["LogID"], 0.0) + (ps - pe) * ts
+            out: dict[int, float] = {}
+            for r in self.conn.execute(
+                    "SELECT ID, Divetime, DepthAvg FROM Logbook"):
+                g = gas.get(r["ID"])
+                dt, da = r["Divetime"], r["DepthAvg"]
+                if g and dt and dt > 0 and da and da > 0:
+                    out[r["ID"]] = g / (dt * (da / 10.0 + 1))
+            self._sac = out
+        return self._sac
 
     @staticmethod
     def _parse_ids(csv: str | None) -> list[int]:
@@ -218,6 +249,16 @@ class DiveMate:
         if f.min_divetime is not None:
             clauses.append("L.Divetime >= ?")
             params.append(f.min_divetime)
+        if f.min_sac is not None or f.max_sac is not None:
+            # SAC is computed in Python, not a column — resolve matching dive IDs
+            # and constrain on them. Empty set -> a valid (always-false) clause.
+            sac = self.sac()
+            ids = [i for i, v in sac.items()
+                   if (f.min_sac is None or v >= f.min_sac)
+                   and (f.max_sac is None or v <= f.max_sac)]
+            placeholders = ", ".join("?" for _ in ids) if ids else "NULL"
+            clauses.append(f"L.ID IN ({placeholders})")
+            params.extend(ids)
         if f.water is not None:
             clauses.append("L.Water = ?")
             params.append(f.water)
@@ -259,10 +300,12 @@ class DiveMate:
             f"ORDER BY L.{order} {direction}"
         )
         rows = [dict(r) for r in self.conn.execute(sql, params)]
+        sac = self.sac()
         for r in rows:
             for c in SENTINEL_COLUMNS:
                 if r.get(c) == EMPTY_SENTINEL:
                     r[c] = None
+            r["SAC"] = sac.get(r["ID"])
         return rows
 
     def dive_full(self, number: int, diver: int | None = None,
@@ -290,6 +333,7 @@ class DiveMate:
             # drop bulky/binary dive-profile columns — not useful for `info`
             for c in _PROFILE_COLUMNS:
                 r.pop(c, None)
+            r["SAC"] = self.sac().get(r["ID"])
             r["tanks"] = self._tanks(r["ID"])
             r["buddies"] = [self.buddy_names().get(b, f"#{b}")
                             for b in self._parse_ids(r.get("BuddyIDs"))]

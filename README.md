@@ -131,6 +131,8 @@ Accepted by `list`, `count`, `stats`, `group`, and `years`:
 | `--min-depth M` | Max depth ≥ M metres |
 | `--max-depth M` | Max depth ≤ M metres |
 | `--min-divetime MIN` | Dive time ≥ MIN minutes |
+| `--min-sac L` | SAC (RMV) ≥ L litres/min |
+| `--max-sac L` | SAC (RMV) ≤ L litres/min |
 | `--water {0,1}` | 1 = salt water, 0 = fresh |
 | `--weekend` / `--weekday` | Only Sat/Sun, or only Mon–Fri (by dive date) |
 | `--night` / `--day` | Only night dives, or only day dives (by entry time) |
@@ -166,6 +168,13 @@ counts as night, otherwise day (diving after 18:00 in daylight is rare enough
 that a fixed cutoff beats any seasonal guess). Dives without a recorded entry
 time match neither.
 
+**SAC** (shown and filtered as SAC, though it is strictly RMV — the popular name)
+is computed per dive as `gas used / (dive time × mean ATA)`, where gas used is
+summed over the dive's tanks as `(start − end pressure) × tank size` and mean ATA
+is `avg depth / 10 + 1`. It is in L/min, surface-equivalent. Only dives with a
+usable tank pressure drop, a dive time and a recorded average depth get a value;
+others show `—` and are skipped by `--min-sac`/`--max-sac`.
+
 ### `list`
 
 Takes an optional dive-number range as the first argument: `N-M` (inclusive),
@@ -177,6 +186,8 @@ Extra options: `--columns a,b,c` to choose columns, `--desc` for newest first.
 dmcli list 100-130                             # dives numbered 100 through 130
 dmcli list 500                                 # just dive 500
 dmcli list 700- --desc                         # dive 700 to the latest
+dmcli list --min-sac 18                         # air-hog dives (high SAC)
+dmcli list --max-sac 12 --columns Number,Place,SAC   # your most efficient dives
 dmcli list --year 2026 --tank 24.0
 dmcli list --place Tossa --min-depth 25 --desc
 dmcli list --tag sidemount --year 2026        # dives tagged #sidemount
@@ -205,6 +216,8 @@ Country        Spain
 Place          Begur. Furió Fitó
 Dive time      67.3 min
 Max depth      52.5 m
+Avg depth      20.4 m
+SAC (RMV)      16 L/min
 ...
 Tank 1         24 L  O₂ 21%  220→120 bar
 Tank 2         11 L  O₂ 50%  180→100 bar

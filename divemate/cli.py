@@ -33,6 +33,10 @@ def _add_filter_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--min-depth", type=float, help="minimum max-depth (m)")
     p.add_argument("--max-depth", type=float, help="maximum max-depth (m)")
     p.add_argument("--min-divetime", type=float, help="minimum dive time (min)")
+    p.add_argument("--min-sac", type=float, metavar="LMIN",
+                   help="minimum SAC / RMV (L/min)")
+    p.add_argument("--max-sac", type=float, metavar="LMIN",
+                   help="maximum SAC / RMV (L/min)")
     p.add_argument("--water", type=int, choices=(0, 1), help="1=salt, 0=fresh")
     wk = p.add_mutually_exclusive_group()
     wk.add_argument("--weekend", dest="weekend", action="store_true", default=None,
@@ -99,6 +103,7 @@ def _filter_from_args(a: argparse.Namespace) -> DiveFilter:
         comment=comment,
         min_depth=a.min_depth, max_depth=a.max_depth,
         min_divetime=a.min_divetime, water=a.water,
+        min_sac=a.min_sac, max_sac=a.max_sac,
         weekend=a.weekend, night=a.night,
         include_deleted=a.include_deleted,
         diver=a.diver, all_divers=a.all_divers,
@@ -164,6 +169,10 @@ def _describe_filters(a: argparse.Namespace) -> str:
         p.append(f"depth ≤{a.max_depth:g}m")
     if a.min_divetime is not None:
         p.append(f"≥{a.min_divetime:g} min")
+    if getattr(a, "min_sac", None) is not None:
+        p.append(f"SAC ≥{a.min_sac:g} L/min")
+    if getattr(a, "max_sac", None) is not None:
+        p.append(f"SAC ≤{a.max_sac:g} L/min")
     if a.water is not None:
         p.append("salt water" if a.water == 1 else "fresh water")
     if getattr(a, "weekend", None) is not None:
@@ -197,8 +206,10 @@ COLUMN_UNITS = {
     "Watertemp": "°C",
     "Airtemp": "°C",
     "O2": "%",
+    "SAC": "L/min",
 }
 COLUMN_ROUND_INT = {"Divetime"}
+COLUMN_ROUND_1 = {"SAC"}  # round to 1 decimal for display
 # columns where a stored 0 means "no data" and should render blank, not "0".
 # (Temperatures are excluded: their missing value is the -300 sentinel, so a
 # stored 0 is a genuine 0 °C.)
@@ -230,7 +241,12 @@ def _fmt_cell(col: str, v, units: dict[str, str]) -> str:
     if col == "Entrytime" and isinstance(v, str) and len(v) >= 5:
         return v[:5]
     if isinstance(v, (int, float)) and not isinstance(v, bool):
-        num = round(v) if col in COLUMN_ROUND_INT else v
+        if col in COLUMN_ROUND_INT:
+            num = round(v)
+        elif col in COLUMN_ROUND_1:
+            num = round(v, 1)
+        else:
+            num = v
         s = f"{num:g}" if isinstance(num, float) else str(num)
         unit = units.get(col)
         return f"{s} {unit}" if unit else s
@@ -255,7 +271,7 @@ def cmd_list(db: DiveMate, a: argparse.Namespace) -> None:
         return
     cols = a.columns.split(",") if a.columns else \
         ["Number", "Divedate", "Entrytime", "Place", "Depth", "Divetime",
-         "Tanksize", "Watertemp"]
+         "Tanksize", "Watertemp", "SAC"]
     _header(f"Dives — {_describe_filters(a)}")
     _print_table(rows, cols, units=COLUMN_UNITS)
     print(f"\n{len(rows)} dive(s)")
@@ -271,6 +287,7 @@ _INFO_FIELDS = [
     ("Dive time", "Divetime", "min"),
     ("Max depth", "Depth", "m"),
     ("Avg depth", "DepthAvg", "m"),
+    ("SAC (RMV)", "SAC", "L/min"),
     ("Water temp", "Watertemp", "°C"),
     ("Air temp", "Airtemp", "°C"),
     ("Surface int.", "Surfint", ""),
