@@ -277,52 +277,42 @@ def cmd_list(db: DiveMate, a: argparse.Namespace) -> None:
     print(f"\n{len(rows)} dive(s)")
 
 
-# (label, column, unit) for the `info` detail view, in display order.
-_INFO_FIELDS = [
-    ("Dive #", "Number", ""),
-    ("Date", "Divedate", ""),
-    ("Entry time", "Entrytime", ""),
-    ("Country", "Country", ""),
-    ("Place", "Place", ""),
-    ("Dive time", "Divetime", "min"),
-    ("Max depth", "Depth", "m"),
-    ("Avg depth", "DepthAvg", "m"),
-    ("SAC (RMV)", "SAC", "L/min"),
-    ("Water temp", "Watertemp", "°C"),
-    ("Air temp", "Airtemp", "°C"),
-    ("Surface int.", "Surfint", ""),
-    ("Computer", "Computer", ""),
-    ("Dive suit", "Divesuit", ""),
-    ("Weight", "Weight", "kg"),
-    ("Dive type", "Divetype", ""),
-    ("Rating", "Rating", ""),
-    ("Boat", "Boat", ""),
-    ("Weather", "Weather", ""),
-    ("Waves", "Waves", ""),
-    ("Current", "UWCurrent", ""),
-    ("Divemaster", "Divemaster", ""),
+# the `info` detail view, grouped into sections (a rule is drawn between them).
+# Each entry is (label, column, unit); "Buddies" and "Tanks" are rendered
+# specially from the dive's resolved buddy list and tanks.
+_INFO_SECTIONS = [
+    [("Dive #", "Number", "")],
+    [("Date", "Divedate", ""),
+     ("Entry time", "Entrytime", "")],
+    [("Place", "Place", ""),
+     ("Country", "Country", ""),
+     ("Buddies", "__buddies__", "")],
+    [("Dive time", "Divetime", "min"),
+     ("Max depth", "Depth", "m"),
+     ("Avg depth", "DepthAvg", "m"),
+     ("Water temp", "Watertemp", "°C")],
+    [("Tanks", "__tanks__", ""),
+     ("SAC (RMV)", "SAC", "L/min")],
 ]
 
+_INFO_LABEL_W = 13
 
-def _print_dive(r: dict) -> None:
-    water = {1: "salt", 0: "fresh"}.get(r.get("Water"))
-    for label, col, unit in _INFO_FIELDS:
-        v = r.get(col)
-        if v in (None, "", 0) and col not in ("Number",):
-            continue
-        if col == "Divedate":
-            v = format_date_es(v)
-        elif isinstance(v, float):
-            v = f"{round(v, 1):g}"
-        txt = f"{v} {unit}".strip() if unit else str(v)
-        print(f"{label:<14} {txt}")
-    if water:
-        print(f"{'Water':<14} {water}")
-    buddies = r.get("buddies") or ([r["Buddy"]] if r.get("Buddy") else [])
-    if buddies:
-        print(f"{'Buddies':<14} {', '.join(buddies)}")
-    tanks = r.get("tanks") or []
-    for i, t in enumerate(tanks, 1):
+
+def _info_scalar(label: str, v, unit: str) -> str | None:
+    """Render one 'label value' line, or None when there is no value."""
+    if v in (None, "", 0):
+        return None
+    if isinstance(v, str):
+        v = format_date_es(v)  # ISO date -> DD-MM-YYYY, else unchanged
+    elif isinstance(v, float):
+        v = f"{round(v, 1):g}"
+    txt = f"{v} {unit}".strip() if unit else str(v)
+    return f"{label:<{_INFO_LABEL_W}} {txt}"
+
+
+def _info_tanks(r: dict) -> list[str]:
+    out = []
+    for i, t in enumerate(r.get("tanks") or [], 1):
         parts = []
         if t.get("Tanksize"):
             parts.append(f"{t['Tanksize']:g} L")
@@ -335,9 +325,41 @@ def _print_dive(r: dict) -> None:
         if t.get("Name"):
             parts.append(str(t["Name"]))
         if parts:
-            print(f"{'Tank ' + str(i):<14} {'  '.join(parts)}")
+            out.append(f"{'Tank ' + str(i):<{_INFO_LABEL_W}} {'  '.join(parts)}")
+    return out
+
+
+def _info_rule() -> str:
+    rule = "─" * (_INFO_LABEL_W + 14)
+    return f"\033[2m{rule}\033[0m" if sys.stdout.isatty() else rule
+
+
+def _print_dive(r: dict) -> None:
+    rendered: list[list[str]] = []
+    for section in _INFO_SECTIONS:
+        lines: list[str] = []
+        for label, col, unit in section:
+            if col == "__buddies__":
+                buddies = r.get("buddies") or ([r["Buddy"]] if r.get("Buddy") else [])
+                if buddies:
+                    lines.append(f"{label:<{_INFO_LABEL_W}} {', '.join(buddies)}")
+            elif col == "__tanks__":
+                lines.extend(_info_tanks(r))
+            else:
+                line = _info_scalar(label, r.get(col), unit)
+                if line:
+                    lines.append(line)
+        if lines:
+            rendered.append(lines)
+
+    for i, lines in enumerate(rendered):
+        if i:
+            print(_info_rule())
+        for line in lines:
+            print(line)
     if r.get("Comments"):
-        print(f"\n{r['Comments']}")
+        print(_info_rule())
+        print(r["Comments"])
 
 
 def cmd_info(db: DiveMate, a: argparse.Namespace) -> None:
