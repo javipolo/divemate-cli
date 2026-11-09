@@ -84,6 +84,17 @@ def _plot_series(grid: _Grid, cols: list[float | None], lo: float, hi: float,
         prev = r
 
 
+def _int_ticks(lo: int, hi: int, n: int) -> list[int]:
+    """Up to ``n`` evenly spaced whole-number ticks spanning [lo, hi]."""
+    if hi <= lo:
+        return [lo]
+    step = max(1, round((hi - lo) / (n - 1)))
+    ticks = list(range(lo, hi + 1, step))
+    if ticks[-1] != hi:
+        ticks.append(hi)
+    return ticks
+
+
 def _nice_labels(lo: float, hi: float, n: int) -> list[tuple[float, float]]:
     """Return (fraction-from-top, value) pairs for n evenly spaced ticks."""
     out = []
@@ -152,24 +163,30 @@ def profile_chart(times: list[float], depths: list[float],
     # negate depth so the surface (0) sits at the top; relabel ticks positive
     plt.plot(times, [-d for d in depths], yside="left", color="blue+",
              label="depth (m)")
-    dmax = max(depths) or 1.0
-    ticks = [dmax * i / 6 for i in range(7)]
-    plt.yticks([-t for t in ticks], [f"{t:.0f}" for t in ticks], yside="left")
+
+    # all axes use whole-number ticks (the dive computer has no decimals)
+    dmax = int(max(depths)) or 1
+    dticks = _int_ticks(0, dmax, 7)
+    plt.yticks([-t for t in dticks], [str(t) for t in dticks], yside="left")
+
+    tmax = int(round(times[-1])) or 1
+    xticks = _int_ticks(0, tmax, 6)
+    plt.xticks(xticks, [str(t) for t in xticks])
 
     have_temp = bool(temps) and any(t is not None for t in temps)
     if have_temp:
         xt = [x for x, t in zip(times, temps) if t is not None]  # type: ignore[arg-type]
         yt = [t for t in temps if t is not None]                 # type: ignore[union-attr]
         plt.plot(xt, yt, yside="right", color="red+", label="temp (°C)")
+        import math
+        tticks = _int_ticks(math.floor(min(yt)), math.ceil(max(yt)), 7)
+        plt.yticks(tticks, [str(t) for t in tticks], yside="right")
 
     plt.xlabel("time (min)")
     if title:
         plt.title(title)
     plt.plotsize(width, height)
-    out = plt.build().split("\n")
-    if have_temp:
-        out.append(f"temperature {min(yt):.1f}–{max(yt):.1f} °C")
-    return out
+    return plt.build().split("\n")
 
 
 def _ascii_profile(times: list[float], depths: list[float],
