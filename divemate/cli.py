@@ -281,12 +281,16 @@ def cmd_list(db: DiveMate, a: argparse.Namespace) -> None:
         raise ValueError(f"cannot sort by {a.sort!r}. Fields: "
                          + ", ".join(sorted(set(SORT_FIELDS.values()))))
     col = SORT_FIELDS[key]
+    desc = not a.asc  # default: highest first
     if col == "SAC":
         rows = db.dives(f)
-        rows.sort(key=lambda r: (r.get("SAC") is None, r.get("SAC") or 0),
-                  reverse=a.desc)
+        # None sorts last regardless of direction
+        rows.sort(key=lambda r: (r.get("SAC") is None,
+                                 -(r.get("SAC") or 0) if desc else (r.get("SAC") or 0)))
     else:
-        rows = db.dives(f, order=col, desc=a.desc)
+        rows = db.dives(f, order=col, desc=desc)
+    if a.limit:
+        rows = rows[:a.limit]
     if a.json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
         return
@@ -746,8 +750,9 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--sort", metavar="FIELD",
                     help="sort by: date (default), number, depth, avgdepth, "
                          "divetime, watertemp, tanksize, sac, place, country")
-    pl.add_argument("--desc", action="store_true",
-                    help="descending order (default ascending; newest first for date)")
+    pl.add_argument("--asc", action="store_true",
+                    help="ascending order (default: descending, highest first)")
+    pl.add_argument("--limit", type=int, help="show only the first N dives")
     pl.set_defaults(func=cmd_list)
 
     pi = sub.add_parser("info", help="show every detail of one dive by its number")

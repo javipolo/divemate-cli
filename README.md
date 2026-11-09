@@ -184,19 +184,19 @@ a single `N`, or open-ended `N-` / `-M`. Combines with every other filter.
 
 Extra options: `--columns a,b,c` to choose columns; `--sort FIELD` to order by
 `date` (default), `number`, `depth`, `avgdepth`, `divetime`, `watertemp`,
-`tanksize`, `sac`, `place` or `country`; `--desc` for descending order.
+`tanksize`, `sac`, `place` or `country`; `--limit N` to show only the first N.
+Results are **descending** (highest first) by default — pass `--asc` to reverse.
 
 ```bash
 dmcli list 100-130                             # dives numbered 100 through 130
 dmcli list 500                                 # just dive 500
-dmcli list 700- --desc                         # dive 700 to the latest
+dmcli list 700-                                # dive 700 to the latest
 dmcli list --min-sac 18                         # air-hog dives (high SAC)
 dmcli list --max-sac 12 --columns Number,Place,SAC   # your most efficient dives
 dmcli list --year 2026 --tank 24.0
-dmcli list --place Tossa --min-depth 25 --desc
-dmcli list --sort depth --desc                 # deepest dives first
-dmcli list --sort divetime --desc              # longest dives first
-dmcli list --sort sac                          # most air-efficient first
+dmcli list --sort depth --limit 10             # ten deepest dives
+dmcli list --sort divetime                     # longest dives first
+dmcli list --sort sac --asc --limit 5          # five most air-efficient dives
 dmcli list --tag sidemount --year 2026        # dives tagged #sidemount
 dmcli list --comment "ejercicio"               # free-text comment search
 dmcli tags                                     # see every #tag you use
