@@ -52,7 +52,7 @@ def series_chart(xs: list[float], ys: list[float | None], *,
     plt.theme("clear")
     plt.plot(px, py, color=color, label=ylabel or None)
     if xticks:
-        plt.xticks([p for p, _ in xticks], [l for _, l in xticks])
+        plt.xticks([p for p, _ in xticks], [lbl for _, lbl in xticks])
     if int_y:
         yt = _int_ticks(math.floor(min(py)), math.ceil(max(py)), 8)
         plt.yticks(yt, [str(t) for t in yt])

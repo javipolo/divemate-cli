@@ -460,14 +460,6 @@ GRAPH_FIELDS = {
 }
 
 
-def _week_monday(iso: str) -> str:
-    """The ISO Monday ('YYYY-MM-DD') of the week containing this date — matches
-    the SQL week bucket in db._group_expr."""
-    import datetime
-    d = datetime.date.fromisoformat(iso[:10])
-    return (d - datetime.timedelta(days=d.weekday())).isoformat()
-
-
 def _fill_periods(labels: list[str], by: str) -> list[str]:
     """Contiguous period labels from min..max so empty periods show as 0."""
     if not labels:
