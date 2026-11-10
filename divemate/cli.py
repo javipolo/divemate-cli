@@ -590,13 +590,31 @@ GRAPH_FIELDS = {
 }
 
 
+def _week_monday(iso: str) -> str:
+    """The ISO Monday ('YYYY-MM-DD') of the week containing this date — matches
+    the SQL week bucket in db._group_expr."""
+    import datetime
+    d = datetime.date.fromisoformat(iso[:10])
+    return (d - datetime.timedelta(days=d.weekday())).isoformat()
+
+
 def _fill_periods(labels: list[str], by: str) -> list[str]:
-    """Contiguous period labels from min..max so empty months/years show as 0."""
+    """Contiguous period labels from min..max so empty periods show as 0."""
     if not labels:
         return []
     if by == "year":
         lo, hi = int(labels[0]), int(labels[-1])
         return [str(y) for y in range(lo, hi + 1)]
+    if by == "week":
+        # labels are ISO Monday dates; step a week at a time
+        import datetime
+        lo = datetime.date.fromisoformat(labels[0])
+        hi = datetime.date.fromisoformat(labels[-1])
+        out, d = [], lo
+        while d <= hi:
+            out.append(d.isoformat())
+            d += datetime.timedelta(days=7)
+        return out
     # month: 'YYYY-MM'
     first, last = labels[0], labels[-1]
     y0, m0 = int(first[:4]), int(first[5:7])
@@ -649,14 +667,16 @@ def cmd_graph(db: DiveMate, a: argparse.Namespace) -> None:
 
 def _graph_count(db: DiveMate, a: argparse.Namespace) -> None:
     by = (a.by or "month").strip().lower()
-    if by not in ("month", "year"):
-        raise ValueError("--by must be 'month' or 'year'")
+    if by not in ("month", "year", "week"):
+        raise ValueError("--by must be 'week', 'month' or 'year'")
     filt = _filter_from_args(a)
     rows = db.group_count(by, filt, order="value", predicate=_predicate_from_args(a))
     counts = {r["value"]: r["dives"] for r in rows}
     # --from / --to also fix the axis extent (zero-filled up to those dates)
     keys = set(counts)
-    period = (lambda iso: iso[:4]) if by == "year" else (lambda iso: iso[:7])
+    period = {"year": lambda iso: iso[:4],
+              "month": lambda iso: iso[:7],
+              "week": _week_monday}[by]
     if filt.date_from:
         keys.add(period(filt.date_from))
     if filt.date_to:
@@ -827,7 +847,7 @@ def _bash_completion_script() -> str:
     # value suggestions for positionals that take a known set of words
     from .db import _GROUPABLE
     positional = {
-        "group": sorted(_GROUPABLE) + ["year", "month", "weekend", "night", "buddy", "region"],
+        "group": sorted(_GROUPABLE) + ["year", "month", "week", "weekend", "night", "buddy", "region"],
         "graph": sorted(GRAPH_FIELDS) + ["count"],
         "info": ["last", "first"],
         "completion": ["bash"],
@@ -917,7 +937,7 @@ def build_parser() -> argparse.ArgumentParser:
     pgr = sub.add_parser("graph", help="plot a numeric field over time (+ filters)")
     pgr.add_argument("field", help="field to plot: depth (maxdepth), avgdepth, "
                      "divetime, watertemp, sac; or 'count' for dives per period")
-    pgr.add_argument("--by", choices=("month", "year"),
+    pgr.add_argument("--by", choices=("week", "month", "year"),
                      help="for 'count': bucket size (default month)")
     pgr.add_argument("--desc", action="store_true", help="newest first")
     _add_filter_args(pgr)
@@ -930,7 +950,7 @@ def build_parser() -> argparse.ArgumentParser:
     pg = sub.add_parser("group", help="count dives grouped by a field (+ filters)")
     pg.add_argument("by", help="field to group by: Place, Country, Region, Buddy, "
                     "Computer, Divesuit, Water, Tanksize, Boat, Rating, ... or year / "
-                    "month / weekend / night")
+                    "month / week / weekend / night")
     pg.add_argument("--limit", type=int, help="show only the top N groups")
     pg.add_argument("--sort", choices=("count", "value"), default="count",
                     help="order by dive count (default) or by the group value")

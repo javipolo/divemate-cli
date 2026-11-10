@@ -604,13 +604,18 @@ class DiveMate:
                     f"THEN 'night' ELSE 'day' END")
         if key in ("month", "mes"):
             return "substr(L.Divedate,1,7)"
+        if key in ("week", "semana"):
+            # the ISO Monday of the dive's week (sortable 'YYYY-MM-DD'); %w is
+            # 0=Sun..6=Sat, so days since Monday = (%w + 6) % 7
+            return ("date(L.Divedate, '-' || "
+                    "((CAST(strftime('%w', L.Divedate) AS INTEGER) + 6) % 7) || ' days')")
         if key in ("weekend", "weekday", "weekends", "weekdays"):
             return ("CASE WHEN strftime('%w',L.Divedate) IN ('0','6') "
                     "THEN 'weekend' ELSE 'weekday' END")
         if key in _GROUPABLE_LC:
             return f"L.{_GROUPABLE_LC[key]}"
         allowed = ", ".join(sorted(_GROUPABLE) +
-                            ["year", "month", "weekend", "night", "buddy", "region"])
+                            ["year", "month", "week", "weekend", "night", "buddy", "region"])
         raise ValueError(f"cannot group by {column!r}. Allowed: {allowed}")
 
     def dives_per_year(self, f: DiveFilter | None = None,

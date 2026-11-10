@@ -358,8 +358,9 @@ with dive dates, y axis the field). Accepts all the same filters as `list`.
 Fields: `depth` (a.k.a. `maxdepth`), `avgdepth`, `divetime`, `watertemp`, `sac`.
 
 Use the special field **`count`** to plot the **number of dives per period**
-instead of a per-dive value: `--by month` (default) or `--by year`, with empty
-periods shown as 0. Combine with any filter — e.g. dives with a buddy over time.
+instead of a per-dive value: `--by week`, `--by month` (default) or `--by year`,
+with empty periods shown as 0 (weeks are labelled by their ISO Monday). Combine
+with any filter — e.g. dives with a buddy over time.
 `--from`/`--to` (and `--period`) set the start/end of the x axis, zero-filling
 out to those dates even when there are no dives there.
 
@@ -372,6 +373,7 @@ dmcli graph sac --year 2024              # how your air consumption trends
 dmcli graph depth --place Tossa          # max depth per dive at a site
 dmcli graph watertemp                    # water temperature over your whole log
 dmcli graph count --buddy Lushka         # dives with a buddy, per month
+dmcli graph count --by week --period 2025  # dives per week in 2025
 dmcli graph count --by year              # dives per year across the whole log
 dmcli graph count --by year --from 01-01-2015 --to 31-12-2026   # fixed axis span
 ```
@@ -384,10 +386,11 @@ can scope the breakdown any way you want.
 
 Group by (case-insensitive): `Place`, `Country`, `Buddy`, `Computer`, `Divesuit`,
 `Water`, `Tanksize`, `Tanktype`, `Divemaster`, `Boat`, `Weather`, `Waves`,
-`UWCurrent`, `Rating`, `Entry`, `Deco`, `Divetype`, `O2`, or the virtual `year`,
-`month`, `weekend` (splits into `weekday` / `weekend`) and `night` (splits into
-`night` / `day`, plus `unknown` for dives with no entry time — same 18:00–06:00
-rule as the `--night`/`--day` filters).
+`UWCurrent`, `Rating`, `Entry`, `Deco`, `Divetype`, `O2`, `Region`, or the
+virtual `year`, `month`, `week` (by ISO Monday), `weekend` (splits into
+`weekday` / `weekend`) and `night` (splits into `night` / `day`, plus `unknown`
+for dives with no entry time — same 18:00–06:00 rule as the `--night`/`--day`
+filters).
 
 Options: `--limit N` (top N groups), `--sort count|value` (default `count`).
 
