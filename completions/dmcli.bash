@@ -13,7 +13,7 @@ _dmcli() {
         esac
     done
     if [[ -z "$cmd" ]]; then
-        COMPREPLY=( $(compgen -W "list info count graph stats group years tanks tags divers completion pull $global" -- "$cur") )
+        COMPREPLY=( $(compgen -W "list info count graph stats group years tanks tags divers query-help qhelp completion pull $global" -- "$cur") )
         return
     fi
     local opts=""
@@ -28,6 +28,8 @@ _dmcli() {
     tanks) opts="-h --help" ;;
     tags) opts="-h --help -q --query --include-deleted --diver --all-divers" ;;
     divers) opts="-h --help" ;;
+    query-help) opts="-h --help" ;;
+    qhelp) opts="-h --help" ;;
     completion) opts="-h --help bash" ;;
     pull) opts="-h --help --key --folder --name --out" ;;
     esac

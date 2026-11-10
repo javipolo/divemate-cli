@@ -109,6 +109,7 @@ Run `divemate <command> --help` for the full option list of any command.
 | `tanks` | List the distinct tank sizes present in the database |
 | `tags` | List `#tags` found in comments, with dive counts |
 | `divers` | List diver profiles in the DB with their dive counts |
+| `query-help` (`qhelp`) | Print a quick reference for the query language |
 | `pull` | Download the logbook from Google Drive (see below) |
 
 `--json` is a global flag — put it before the command:

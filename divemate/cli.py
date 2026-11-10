@@ -21,7 +21,8 @@ def _add_filter_args(p: argparse.ArgumentParser) -> None:
                         "or depth>=30'. Operators: text = ~ (contains) == (exact) "
                         "!= !~ !==; numbers/date = != < <= > >=; booleans "
                         "night/weekend; period=\"last year\". Also 'sort FIELD "
-                        "[asc|desc]' and 'limit N' (used by `list`).")
+                        "[asc|desc]' and 'limit N' (used by `list`). "
+                        "Full reference: `dmcli query-help`.")
     # the query can also be given as bare trailing words (no quotes needed), e.g.
     # `graph count tag=sidemount region=mallorca`. On `list`, a leading N-M dive
     # range is taken first. Joins with -q/--query (if both given) using AND.
@@ -742,6 +743,10 @@ def cmd_completion(db: None, a: argparse.Namespace) -> None:
     print(_bash_completion_script(), end="")
 
 
+def cmd_query_help(db: None, a: argparse.Namespace) -> None:
+    print(query.help_text())
+
+
 def cmd_pull(db: None, a: argparse.Namespace) -> None:
     # imported lazily so the rest of the CLI works without google-auth installed
     from .gdrive import GDriveConfig, download
@@ -815,6 +820,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     pd = sub.add_parser("divers", help="list diver profiles and dive counts")
     pd.set_defaults(func=cmd_divers)
+
+    pqh = sub.add_parser("query-help", aliases=["qhelp"],
+                         help="explain the query language (fields, operators, examples)")
+    pqh.set_defaults(func=cmd_query_help, no_db=True)
 
     pcomp = sub.add_parser("completion",
                            help="print a bash completion script for dmcli")

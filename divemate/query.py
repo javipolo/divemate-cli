@@ -215,6 +215,53 @@ def _resolve(name: str) -> FieldSpec:
     return spec
 
 
+def help_text() -> str:
+    """A short reference for the query language: fields, operators, examples.
+    Built from the field registry so it stays in sync."""
+    aliases: dict[str, list[str]] = {}
+    for alias, target in _ALIASES.items():
+        aliases.setdefault(target, []).append(alias)
+
+    def names(kind: str) -> str:
+        out = []
+        for s in _SPECS:
+            if s.kind == kind:
+                al = aliases.get(s.key)
+                out.append(f"{s.key} ({'/'.join(al)})" if al else s.key)
+        return ", ".join(out)
+
+    return "\n".join([
+        "divemate query language",
+        "",
+        "A filter is: field OP value, combined with and / or / not and ( ).",
+        "Adjacent terms imply 'and'. Trailing: sort FIELD [asc|desc], limit N.",
+        "",
+        "text fields:    " + names(TEXT),
+        "  = ~ (contains)  == (exact)  != !~ (not contains)  !== (not exact)",
+        "number fields:  " + names(NUMBER),
+        "  = == (equal)  != !== (not equal)  < <= > >=",
+        "date field:     date   (ISO YYYY-MM-DD)   = == != !== < <= > >=",
+        "bool fields:    " + names(BOOL) + "   (bare flag, or =true / =false)",
+        "",
+        "shortcuts:",
+        "  tag=<name>      a #tag in the comments (without the #)",
+        '  period=<range>  2024, "this month", "last year", "month 2024-07",',
+        '                  "last 30 days", …   (only = / !=)',
+        "",
+        "notes: text is case- and accent-insensitive; multi-valued fields",
+        "  (buddy, tanksize) match when any value does; water is salt/fresh.",
+        "",
+        "examples:",
+        "  dmcli list region~mallorca sort depth desc limit 10",
+        "  dmcli count 'depth>=30 and (night or watertemp<16)'",
+        "  dmcli list period=2025 tag=sidemount",
+        '  dmcli list \'place=="Tossa de Mar"\'      # exact, not substring',
+        "  dmcli group region 'country=spain and depth>20'",
+        "",
+        "tip: quote anything with > < ( ) so the shell doesn't eat it.",
+    ])
+
+
 # --- grammar + transformer -------------------------------------------------
 
 _GRAMMAR = r"""
