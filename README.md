@@ -6,8 +6,8 @@ a clean CLI and a small reusable Python library on top of it, so you can slice
 your dive log without writing SQL by hand.
 
 ```console
-$ dmcli list --tank 24 --period 'last year'
-Dives — year 2025, tank 24L
+$ dmcli list tank=24 period='last year'
+Dives — query 'tank="24" period="last year"'
 Number  Divedate    Place                             Depth   Divetime  Tanksize  Watertemp
 ------  ----------  --------------------------------  ------  --------  --------  ---------
 487     07-02-2025  Tossa. Perduts                    29.9 m  104 min   24 L      13 °C
@@ -23,13 +23,14 @@ Number  Divedate    Place                             Depth   Divetime  Tanksize
 
 ## Features
 
-- Filter dives by year, date range, tank size, place, country, buddy, depth,
-  dive time, and water type — any combination.
+- A small [query language](#query-language--query) for filtering — AND/OR,
+  grouping, negation, numeric/date comparisons, plus `sort`/`limit` — over any
+  dive attribute (date, site, region, buddy, depth, dive time, SAC, tags, …).
 - Aggregate statistics (totals, averages, maxima) over any filtered set.
-- Group and rank dives by site, country, buddy, computer, suit, or water type.
-- Dive counts per year.
+- Group and rank dives by site, country, region, buddy, computer, suit, week, …
+- Terminal charts: a field over time, or dives per week/month/year.
 - Machine-readable `--json` output on every command, for scripts or a future UI.
-- Zero dependencies — standard library only, Python 3.10+.
+- Python 3.10+; the only runtime dependency is `lark` (the query parser).
 - Read-only access: the tool never writes to your logbook.
 
 ## Installation
@@ -54,7 +55,7 @@ The tool needs the path to your `.ddb` file. In order of precedence:
 3. Default: `DiveMate.ddb` in the current directory.
 
 ```bash
-dmcli --db ~/dives/DiveMate.ddb stats --year 2026
+dmcli --db ~/dives/DiveMate.ddb stats year=2026
 export DIVEMATE_DB=~/dives/DiveMate.ddb   # then omit --db
 ```
 
@@ -110,94 +111,45 @@ Run `divemate <command> --help` for the full option list of any command.
 | `pull` | Download the logbook from Google Drive (see below) |
 
 `--json` is a global flag — put it before the command:
-`dmcli --json list --year 2026`.
+`dmcli --json list year=2026`.
 
 ### Filters
 
-Accepted by `list`, `count`, `stats`, `group`, and `years`:
+All dive-attribute filtering is done with the **[query language](#query-language--query)**,
+accepted by `list`, `count`, `stats`, `graph`, `group`, `years` and `tags` — as
+`-q/--query EXPR` or simply as bare trailing words. Besides it, only three
+**scope** flags remain (they decide which dives the query even sees, so they
+can't live inside the query):
 
 | Flag | Meaning |
 |------|---------|
 | `-q EXPR` / `--query EXPR` | Filter expression — see [Query language](#query-language--query) |
-| `--year N` | Dives in calendar year N |
-| `--period PERIOD` | Quick range — see below |
-| `--from DD-MM-YYYY` | On or after this date (ISO also accepted) |
-| `--to DD-MM-YYYY` | On or before this date (ISO also accepted) |
-| `--tank L` / `--tanksize L` | Dives using a tank of L litres |
-| `--exclude-tank L` | Exclude dives that have a tank of L litres |
-| `--place TEXT` | Place name contains TEXT (case-insensitive) |
-| `--country TEXT` | Country contains TEXT |
-| `--region TEXT` | Dive-site region contains TEXT |
-| `--buddy TEXT` | Buddy field contains TEXT |
-| `--comment TEXT` | Comments contain TEXT |
-| `--tag NAME` | Comments contain `#NAME` (give it without the `#`) |
-| `--exclude-place TEXT` | Exclude dives whose place contains TEXT (repeatable) |
-| `--exclude-country TEXT` | Exclude dives whose country contains TEXT (repeatable) |
-| `--exclude-region TEXT` | Exclude dives whose region contains TEXT (repeatable) |
-| `--exclude-buddy TEXT` | Exclude dives with a matching buddy (repeatable) |
-| `--exclude-comment TEXT` | Exclude dives whose comments contain TEXT (repeatable) |
-| `--min-depth M` | Max depth ≥ M metres |
-| `--max-depth M` | Max depth ≤ M metres |
-| `--min-divetime MIN` | Dive time ≥ MIN minutes |
-| `--min-sac L` | SAC (RMV) ≥ L litres/min |
-| `--max-sac L` | SAC (RMV) ≤ L litres/min |
-| `--water {0,1}` | 1 = salt water, 0 = fresh |
-| `--weekend` / `--weekday` | Only Sat/Sun, or only Mon–Fri (by dive date) |
-| `--night` / `--day` | Only night dives, or only day dives (by entry time) |
 | `--include-deleted` | Include dives DiveMate soft-deleted (`Status=2`) |
 | `--diver ID` | Restrict to a given `DiverID` (default: the owner) |
 | `--all-divers` | Include every diver profile, not just yours |
 
-**Dates** are shown and accepted in Spanish `DD-MM-YYYY` format (ISO input still
-works; `--json` output stays ISO for machines). `--from`/`--to` also accept the
-keywords `today` (`now`) and `yesterday`, e.g. `--from 01-01-2026 --to today`.
-
-`--period` accepts quick relative ranges (case-insensitive):
-
-| Period | Meaning |
-|--------|---------|
-| `today` (`day`), `yesterday` | That day |
-| `this week` (`week`), `last week` | Mon–Sun of the current / previous week |
-| `this month` (`month`), `last month` | The current / previous calendar month |
-| `this year` (`year`), `last year` | The current / previous calendar year |
-| `year 2024` or `2024` | A specific year |
-| `month 2024-07` | A specific month |
-| `last 30 days` | The last N days up to today |
-
-`--period` sets both bounds; an explicit `--from`/`--to` overrides that side.
-
-Filters combine with AND. `--tank` matches **any** tank recorded on a dive (it
-joins the per-dive `Tank` table), not only the primary tank stored on the dive
-record — so a dive where the 24 L was a stage or deco tank still matches.
-
-`--weekend`/`--weekday` split on the dive's weekday (Sat/Sun vs Mon–Fri).
-
-`--night`/`--day` split on the entry time: a dive entered from **18:00 to 06:00**
-counts as night, otherwise day (diving after 18:00 in daylight is rare enough
-that a fixed cutoff beats any seasonal guess). Dives without a recorded entry
-time match neither.
-
-**SAC** (shown and filtered as SAC, though it is strictly RMV — the popular name)
-is computed per dive as `gas used / (dive time × mean ATA)`, where gas used is
+**SAC** (queried as `sac`, though it is strictly RMV — the popular name) is
+computed per dive as `gas used / (dive time × mean ATA)`, where gas used is
 summed over the dive's tanks as `(start − end pressure) × tank size` and mean ATA
 is `avg depth / 10 + 1`. It is in L/min, surface-equivalent. Only dives with a
 usable tank pressure drop, a dive time and a recorded average depth get a value;
-others show `—` and are skipped by `--min-sac`/`--max-sac`.
+others show `—` and never match a `sac` comparison.
 
-The `--exclude-*` filters are repeatable and drop a dive if it matches **any** of
-the given terms, e.g. `--exclude-place manacor --exclude-place portocolom`.
+> Dates display/parse as `DD-MM-YYYY`, but `--json` output stays ISO. In the
+> query use ISO dates (`date>=2024-06-01`) or the `period=` shortcut.
 
 ### Query language (`--query`)
 
-For anything the flags can't express — OR, grouping, negation, numeric
-comparisons — use `-q` / `--query` with a filter expression. It is accepted by
-the same commands as the other filters and **combines with them using AND**.
+The query language expresses every dive-attribute filter — AND/OR, grouping,
+negation, numeric and date comparisons — and (for `list`) sorting and limiting.
+Use `-q` / `--query` with an expression, or just type it as bare trailing words.
 
 ```sh
-dmcli list  --query '(region=Mallorca and place~toro) or region=Catalunya'
-dmcli count --query 'maxdepth>=10'
-dmcli list  --country spain --query 'sac<18 or tank=15'
+dmcli list  '(region=Mallorca and place~toro) or region=Catalunya'
+dmcli count 'maxdepth>=10'
+dmcli list  'sac<18 or tank=15'
 dmcli group region --query 'night and divetime>50'
+dmcli list  region~mallorca sort depth desc limit 10     # no quotes needed here
 ```
 
 You can also drop the `--query` and the quotes and just append the expression as
@@ -237,19 +189,17 @@ whole-value match — e.g. `place=tossa` matches any Tossa site, `place=="Tossa 
 Mar"` only that exact place. On numbers/dates `=` and `==` both mean equal.
 
 Text matching is accent-insensitive as well as case-insensitive, so `buddy~tomas`
-matches `Tomás` and `Tomàs`, and `place~palamos` matches `Palamós`. (This folding
-applies to `--query`; the plain `--place`/`--buddy`/… flags still match accents
-literally.)
+matches `Tomás` and `Tomàs`, and `place~palamos` matches `Palamós`.
 
 `tag=cave` matches a `#cave` tag in the comments (give it without the `#`), the
 same tags `dmcli tags` lists.
 
 `period` is a date-range shortcut, expanded before evaluation into a `date`
 range — `period="last year"` becomes `date>=2025-01-01 and date<=2025-12-31`. It
-takes the same values as the `--period` flag (`period=2024`,
-`period="this month"`, `period="month 2024-07"`, `period="last 30 days"`, …) and
-supports only `=` / `!=` (`!=` meaning outside the range). Quote any value with
-spaces.
+accepts `period=today`, `period=yesterday`, `period="this week"` / `"last week"`,
+`period="this month"` / `"last month"`, `period="this year"` / `"last year"`,
+`period=2024`, `period="month 2024-07"`, `period="last 30 days"`, … and supports
+only `=` / `!=` (`!=` meaning outside the range). Quote any value with spaces.
 
 Values are barewords (`region=Mallorca`, accents are fine); quote anything with
 spaces or punctuation: `place="el toro"`. Multi-valued fields (`buddy`,
@@ -258,35 +208,45 @@ Matching is done in Python over the selected dives (the dataset is one
 logbook), so the query is powerful without a SQL round-trip; unknown fields,
 bad operators and syntax errors are reported clearly.
 
+**Sorting & limiting** (used by `list`; ignored by the other commands): append
+`sort FIELD [asc|desc]` and/or `limit N` to the query. `FIELD` is any query
+field; default direction is `desc`; missing values sort last. A directives-only
+query (no filter) is allowed, e.g. `sort depth limit 5`.
+
+```sh
+dmcli list region~mallorca sort depth desc limit 10   # ten deepest in Mallorca
+dmcli list sort sac asc limit 5                        # five most air-efficient
+dmcli list 'divetime>=60' sort divetime desc          # longest dives first
+```
+
+`sort`, `limit`, `asc`, `desc` are reserved words (still usable as values after
+an operator, e.g. `place=sort`).
+
 ### `list`
 
-Takes an optional dive-number range as the first argument: `N-M` (inclusive),
-a single `N`, or open-ended `N-` / `-M`. Combines with every other filter.
-
-Extra options: `--columns a,b,c` to choose columns; `--sort FIELD` to order by
-`date` (default), `number`, `depth`, `avgdepth`, `divetime`, `watertemp`,
-`tanksize`, `sac`, `place` or `country`; `--limit N` to show only the first N.
-Results are **descending** (highest first) by default — pass `--asc` to reverse.
+Lists dives matching the query. A leading `N-M` token is still taken as a
+dive-number range sugar (`N`, `N-M`, `N-`, `-M`); sorting/limiting and all
+filtering go in the query. Results default to **newest first** (`sort date desc`).
+`--columns a,b,c` chooses the displayed columns.
 
 ```bash
-dmcli list 100-130                             # dives numbered 100 through 130
-dmcli list 500                                 # just dive 500
-dmcli list 700-                                # dive 700 to the latest
-dmcli list --min-sac 18                         # air-hog dives (high SAC)
-dmcli list --max-sac 12 --columns Number,Place,SAC   # your most efficient dives
-dmcli list --year 2026 --tank 24.0
-dmcli list --sort depth --limit 10             # ten deepest dives
-dmcli list --sort divetime                     # longest dives first
-dmcli list --sort sac --asc --limit 5          # five most air-efficient dives
-dmcli list --tag sidemount --year 2026        # dives tagged #sidemount
-dmcli list --comment "ejercicio"               # free-text comment search
-dmcli tags                                     # see every #tag you use
-dmcli list --weekend --night                   # night dives on weekends
-dmcli stats --weekday --day                     # weekday daytime dives
-dmcli list --period "this month"
-dmcli stats --period "year 2024"
-dmcli list --from 01-06-2025 --to 31-08-2025   # Spanish DD-MM-YYYY
-dmcli list --from 2025-06-01 --to 2025-08-31 --columns Number,Divedate,Place,Depth
+dmcli list 100-130                              # dives numbered 100 through 130
+dmcli list 500                                  # just dive 500
+dmcli list 700-                                 # dive 700 to the latest
+dmcli list 'sac>=18'                            # air-hog dives (high SAC)
+dmcli list 'sac<=12' --columns Number,Place,SAC # your most efficient dives
+dmcli list year=2026 tank=24.0
+dmcli list sort depth desc limit 10             # ten deepest dives
+dmcli list sort divetime desc                   # longest dives first
+dmcli list sort sac asc limit 5                 # five most air-efficient dives
+dmcli list tag=sidemount year=2026              # dives tagged #sidemount
+dmcli list 'comment~ejercicio'                  # free-text comment search
+dmcli tags                                      # see every #tag you use
+dmcli list weekend night                        # night dives on weekends
+dmcli stats weekend=false night=false           # weekday daytime dives
+dmcli list period="this month"
+dmcli stats period="year 2024"
+dmcli list 'date>=2025-06-01 and date<=2025-08-31' --columns Number,Divedate,Place,Depth
 ```
 
 ### `info`
@@ -341,7 +301,7 @@ shown — pass `--diver ID` (see `dmcli divers`) to pick one.
 ### `stats`
 
 ```console
-$ dmcli stats --year 2026 --tank 24.0
+$ dmcli stats year=2026 tank=24.0
 count                  6
 total_divetime_min     598.5
 total_divetime_h       10
@@ -354,59 +314,57 @@ avg_watertemp_c        17.7
 ### `graph`
 
 Plots a numeric field across the matching dives in date order (x axis labelled
-with dive dates, y axis the field). Accepts all the same filters as `list`.
+with dive dates, y axis the field). Accepts the same query as `list`.
 Fields: `depth` (a.k.a. `maxdepth`), `avgdepth`, `divetime`, `watertemp`, `sac`.
 
 Use the special field **`count`** to plot the **number of dives per period**
 instead of a per-dive value: `--by week`, `--by month` (default) or `--by year`,
 with empty periods shown as 0 (weeks are labelled by their ISO Monday). Combine
-with any filter — e.g. dives with a buddy over time.
-`--from`/`--to` (and `--period`) set the start/end of the x axis, zero-filling
-out to those dates even when there are no dives there.
+with any query — e.g. dives with a buddy over time. The x axis spans the first to
+the last dive that matches (constrain it with a `date`/`period` query).
 
 With the `charts` extra (`plotext`) it is a coloured line chart; otherwise a
 plain ASCII chart. `--json` prints the `{date, number, value}` points instead.
 Dives missing the field (or with a 0 that means "no data") leave a gap.
 
 ```bash
-dmcli graph sac --year 2024              # how your air consumption trends
-dmcli graph depth --place Tossa          # max depth per dive at a site
+dmcli graph sac year=2024                # how your air consumption trends
+dmcli graph depth place~Tossa            # max depth per dive at a site
 dmcli graph watertemp                    # water temperature over your whole log
-dmcli graph count --buddy Lushka         # dives with a buddy, per month
-dmcli graph count --by week --period 2025  # dives per week in 2025
+dmcli graph count buddy~Lushka           # dives with a buddy, per month
+dmcli graph count --by week period=2025  # dives per week in 2025
 dmcli graph count --by year              # dives per year across the whole log
-dmcli graph count --by year --from 01-01-2015 --to 31-12-2026   # fixed axis span
 ```
 
 ### `group`
 
 A filtered `list` collapsed into a count per field — "how many dives per site /
-country / tank size / …". It accepts **all the same filters** as `list`, so you
-can scope the breakdown any way you want.
+country / tank size / …". It accepts the **same query** as `list`, so you can
+scope the breakdown any way you want.
 
 Group by (case-insensitive): `Place`, `Country`, `Buddy`, `Computer`, `Divesuit`,
 `Water`, `Tanksize`, `Tanktype`, `Divemaster`, `Boat`, `Weather`, `Waves`,
 `UWCurrent`, `Rating`, `Entry`, `Deco`, `Divetype`, `O2`, `Region`, or the
 virtual `year`, `month`, `week` (by ISO Monday), `weekend` (splits into
 `weekday` / `weekend`) and `night` (splits into `night` / `day`, plus `unknown`
-for dives with no entry time — same 18:00–06:00 rule as the `--night`/`--day`
-filters).
+for dives with no entry time — same 18:00–06:00 rule as the `night` query field).
 
-Options: `--limit N` (top N groups), `--sort count|value` (default `count`).
+Options: `--limit N` (top N groups), `--sort count|value` (default `count`) —
+these are `group`'s own flags, distinct from the query's `sort`/`limit`.
 
 `list`, `group` and `stats` print a header describing exactly what was queried,
-e.g. `Top 10 places by number of dives — year 2026`. It's dimmed in a terminal
-and omitted from `--json` output.
+e.g. `Top 10 places by number of dives — query 'year=2026'`. It's dimmed in a
+terminal and omitted from `--json` output.
 
 ```bash
-dmcli group place --limit 10               # ten most-dived sites
+dmcli group place --limit 10                # ten most-dived sites
 dmcli group country                         # dives per country
 dmcli group tanksize                        # dives per tank size
 dmcli group year --sort value               # dives per year, chronological
-dmcli group month --year 2026 --tag sidemount   # sidemount per month in 2026
+dmcli group month year=2026 tag=sidemount   # sidemount per month in 2026
 dmcli group weekend                         # weekday vs weekend dives
-dmcli group night --year 2026               # night vs day dives in 2026
-dmcli group buddy --place Tossa --limit 5   # top buddies at Tossa
+dmcli group night year=2026                 # night vs day dives in 2026
+dmcli group buddy place~Tossa --limit 5     # top buddies at Tossa
 ```
 
 ### `years`
@@ -476,10 +434,10 @@ Then use it exactly like the CLI, minus `--db` (the wrapper handles the mount):
 
 ```bash
 # uses ./DiveMate.ddb in the current directory
-dmcli list --year 2026 --tank 24.0
+dmcli list year=2026 tank=24.0
 
 # or point at a logbook anywhere
-DIVEMATE_DB=~/dives/DiveMate.ddb dmcli stats --year 2026
+DIVEMATE_DB=~/dives/DiveMate.ddb dmcli stats year=2026
 
 # JSON out, piped like any command
 DIVEMATE_DB=~/dives/DiveMate.ddb dmcli --json years | jq
@@ -528,7 +486,7 @@ export DIVEMATE_GDRIVE_FOLDER=<FOLDER_ID>
 export DIVEMATE_DB=~/dives/DiveMate.ddb                  # where to save it
 
 dmcli pull            # downloads DiveMate.ddb into DIVEMATE_DB
-dmcli stats --period "this year"
+dmcli stats period="this year"
 ```
 
 Flags override the env vars: `--key`, `--folder`, `--name`, `--out`. The default
@@ -565,13 +523,24 @@ with DiveMate("DiveMate.ddb") as db:
     sizes = db.tank_sizes()            # list[float]
 ```
 
-`DiveFilter` fields mirror the CLI filters: `year`, `date_from`, `date_to`,
-`tanksize`, `place`, `country`, `buddy`, `min_depth`, `max_depth`,
-`min_divetime`, `water`, `weekend`, `night`. All optional; unset fields are
+`DiveFilter` carries SQL-level criteria: `year`, `date_from`, `date_to`,
+`number_from`, `number_to`, `tanksize`, `place`, `country`, `region`, `buddy`,
+`comment`, the `exclude_*` lists, `min_depth`, `max_depth`, `min_divetime`,
+`min_sac`, `max_sac`, `water`, `weekend`, `night`, and the scope fields
+`include_deleted` / `diver` / `all_divers`. All optional; unset fields are
 ignored (`weekend`/`night` are tri-state: `True`, `False`, or `None`).
 
-`db.dives()` also takes `order=` (any returned column, default `Divedate`) and
-`desc=` (default `False`).
+For the CLI's full expression language, parse a query and pass its predicate:
+
+```python
+from divemate import query
+pred = query.predicate("region~mallorca and (depth>=30 or night)")
+deep = db.dives(DiveFilter(), predicate=pred)
+```
+
+`db.dives()` also takes `order=` (any returned column, default `Divedate`),
+`desc=` (default `False`), and `predicate=` (a `(record) -> bool` post-filter,
+also accepted by `count`/`stats`/`group_count`/`dives_per_year`/`tags`).
 
 ## Project layout
 
@@ -589,7 +558,8 @@ already JSON-serialisable.
 
 ## Notes on the data
 
-- Dates are stored as `YYYY-MM-DD` text; `--year`/`--from`/`--to` compare on that.
+- Dates are stored as `YYYY-MM-DD` text; the `date`/`year`/`period` query fields
+  compare on that.
 - `Divetime` is in minutes, stored as a fractional number (e.g. `80.0167`).
 - A DiveMate DB can hold **several diver profiles** (dive-computer imports, demo
   data, buddies). Every command shows only *your* dives by default — the profile
@@ -603,7 +573,8 @@ already JSON-serialisable.
 - An empty temperature is stored as the sentinel `-300`; the tool normalizes it
   to blank (and leaves it out of averages), matching what the app shows.
 - Buddies aren't stored on the dive row — `Logbook.BuddyIDs` holds a CSV of IDs
-  into the `Buddy` table. `--buddy` and `group buddy` resolve those names for you.
+  into the `Buddy` table. The `buddy` query field and `group buddy` resolve those
+  names for you.
   Since a dive can have several buddies, `group buddy` totals can exceed the dive
   count (each buddy on a dive is counted).
 - `Water`: `1` = salt, `0` = fresh, following DiveMate's own convention.

@@ -10,7 +10,7 @@ import sys
 
 from . import query
 from .db import DiveMate, DiveFilter
-from .dates import parse_date, parse_period, format_date_es
+from .dates import format_date_es
 
 DEFAULT_DB = os.environ.get("DIVEMATE_DB", "DiveMate.ddb")
 
@@ -19,61 +19,17 @@ def _add_filter_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("-q", "--query", metavar="EXPR",
                    help="filter expression, e.g. '(region=Mallorca and place~toro) "
                         "or depth>=30'. Operators: text = ~ (contains) == (exact) "
-                        "!= !~ !==; numbers = != < <= > >=; booleans night/weekend; "
-                        "period=\"last year\" as a date-range shortcut. "
-                        "Combines with the other filters using AND.")
-    # bare trailing words are joined into the query, so you can skip the quotes:
+                        "!= !~ !==; numbers/date = != < <= > >=; booleans "
+                        "night/weekend; period=\"last year\". Also 'sort FIELD "
+                        "[asc|desc]' and 'limit N' (used by `list`).")
+    # the query can also be given as bare trailing words (no quotes needed), e.g.
     # `graph count tag=sidemount region=mallorca`. On `list`, a leading N-M dive
-    # range is taken first. Combined with -q/--query (if both given) using AND.
+    # range is taken first. Joins with -q/--query (if both given) using AND.
     p.add_argument("query_words", nargs="*", metavar="QUERY",
                    help="query expression as bare words (no quotes needed); "
                         "joins with -q/--query if both are given")
-    p.add_argument("--year", type=int, help="dive year, e.g. 2026")
-    p.add_argument("--period", metavar="PERIOD",
-                   help="quick range: 'this month', 'this year', 'year 2024', "
-                        "'last month', 'last 30 days', today, ...")
-    p.add_argument("--from", dest="date_from", help="date from (DD-MM-YYYY)")
-    p.add_argument("--to", dest="date_to", help="date to (DD-MM-YYYY)")
-    p.add_argument("--tank", "--tanksize", dest="tanksize", type=float,
-                   help="tank size in litres (matches any tank on the dive)")
-    p.add_argument("--exclude-tank", dest="exclude_tanksize", type=float, metavar="LITRES",
-                   help="exclude dives that have a tank of this size (e.g. --tag sidemount "
-                        "--exclude-tank 11.1 = sidemount dives missing an 11.1)")
-    p.add_argument("--place", help="place substring")
-    p.add_argument("--country", help="country substring")
-    p.add_argument("--region", help="region substring (dive-site region)")
-    p.add_argument("--buddy", help="buddy substring")
-    p.add_argument("--comment", help="text to find in the comments")
-    # negative filters (repeatable): exclude dives matching any given substring
-    p.add_argument("--exclude-place", action="append", metavar="SUBSTR",
-                   help="exclude dives whose place matches (repeatable)")
-    p.add_argument("--exclude-country", action="append", metavar="SUBSTR",
-                   help="exclude dives whose country matches (repeatable)")
-    p.add_argument("--exclude-region", action="append", metavar="SUBSTR",
-                   help="exclude dives whose region matches (repeatable)")
-    p.add_argument("--exclude-buddy", action="append", metavar="SUBSTR",
-                   help="exclude dives with a matching buddy (repeatable)")
-    p.add_argument("--exclude-comment", action="append", metavar="SUBSTR",
-                   help="exclude dives whose comments match (repeatable)")
-    p.add_argument("--tag", help="find a #tag in the comments (give it without the #)")
-    p.add_argument("--min-depth", type=float, help="minimum max-depth (m)")
-    p.add_argument("--max-depth", type=float, help="maximum max-depth (m)")
-    p.add_argument("--min-divetime", type=float, help="minimum dive time (min)")
-    p.add_argument("--min-sac", type=float, metavar="LMIN",
-                   help="minimum SAC / RMV (L/min)")
-    p.add_argument("--max-sac", type=float, metavar="LMIN",
-                   help="maximum SAC / RMV (L/min)")
-    p.add_argument("--water", type=int, choices=(0, 1), help="1=salt, 0=fresh")
-    wk = p.add_mutually_exclusive_group()
-    wk.add_argument("--weekend", dest="weekend", action="store_true", default=None,
-                    help="only dives on Sat/Sun")
-    wk.add_argument("--weekday", dest="weekend", action="store_false", default=None,
-                    help="only dives on Mon–Fri")
-    nt = p.add_mutually_exclusive_group()
-    nt.add_argument("--night", dest="night", action="store_true", default=None,
-                    help="only night dives (entry 18:00–06:00)")
-    nt.add_argument("--day", dest="night", action="store_false", default=None,
-                    help="only day dives (entry 06:00–18:00)")
+    # scope flags: these pick which dives the query even sees, so they cannot be
+    # expressed inside the query itself.
     p.add_argument("--include-deleted", action="store_true",
                    help="include dives DiveMate soft-deleted (Status=2)")
     p.add_argument("--diver", type=int, metavar="ID",
@@ -102,40 +58,13 @@ def parse_number_range(s: str) -> tuple[int | None, int | None]:
 
 
 def _filter_from_args(a: argparse.Namespace) -> DiveFilter:
-    # --tag foo is sugar for --comment "#foo"; explicit --comment wins
-    comment = a.comment
-    if comment is None and getattr(a, "tag", None):
-        comment = "#" + a.tag.lstrip("#")
-
-    # resolve dates: --period sets both bounds; explicit --from/--to override
-    date_from, date_to = None, None
-    if a.period:
-        date_from, date_to = parse_period(a.period)
-    if a.date_from:
-        date_from = parse_date(a.date_from)
-    if a.date_to:
-        date_to = parse_date(a.date_to)
-
-    # optional positional dive-number range, e.g. `list 100-130` or `list 100`
+    """Build the SQL-level DiveFilter: only the scope (diver / deleted) and the
+    `list` dive-number range. Every dive attribute is filtered by the query."""
     number_from, number_to = None, None
     if getattr(a, "range", None):
         number_from, number_to = parse_number_range(a.range)
-
     return DiveFilter(
-        year=a.year, date_from=date_from, date_to=date_to,
         number_from=number_from, number_to=number_to,
-        tanksize=a.tanksize, exclude_tanksize=a.exclude_tanksize,
-        place=a.place, country=a.country, region=a.region, buddy=a.buddy,
-        comment=comment,
-        exclude_place=a.exclude_place or [],
-        exclude_country=a.exclude_country or [],
-        exclude_region=a.exclude_region or [],
-        exclude_buddy=a.exclude_buddy or [],
-        exclude_comment=a.exclude_comment or [],
-        min_depth=a.min_depth, max_depth=a.max_depth,
-        min_divetime=a.min_divetime, water=a.water,
-        min_sac=a.min_sac, max_sac=a.max_sac,
-        weekend=a.weekend, night=a.night,
         include_deleted=a.include_deleted,
         diver=a.diver, all_divers=a.all_divers,
     )
@@ -153,7 +82,9 @@ def _looks_like_range(tok: str) -> bool:
 # (e.g. `period='last year'` -> one token, or `period=last year` -> two tokens).
 _CMP_RE = re.compile(
     r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(!==|==|>=|<=|!=|!~|=|~|>|<)\s*(.+?)\s*$")
-_KEYWORDS = {"and", "or", "not"}
+# words that must never be swallowed into a value during repair: boolean
+# connectives and the sort/limit directive keywords
+_KEYWORDS = {"and", "or", "not", "sort", "limit", "asc", "desc"}
 
 
 def _parses(s: str) -> bool:
@@ -218,7 +149,9 @@ def _query_text(a: argparse.Namespace) -> str | None:
     # fast path: each piece already valid -> AND-combine, preserving precedence
     if (flag is None or _parses(flag)) and (not words or _parses(words_str)):
         pieces = ([flag] if flag else []) + ([words_str] if words else [])
-        return pieces[0] if len(pieces) == 1 else " and ".join(f"({p})" for p in pieces)
+        combined = pieces[0] if len(pieces) == 1 else " and ".join(f"({p})" for p in pieces)
+        if _parses(combined):
+            return combined
     # repair path: treat everything as one token stream
     toks = ([flag] if flag else []) + words
     joined = " ".join(toks)
@@ -228,27 +161,19 @@ def _query_text(a: argparse.Namespace) -> str | None:
     return regrouped if _parses(regrouped) else joined
 
 
+def _parse_query(a: argparse.Namespace):
+    """The parsed query.Query (expr + sort/limit) for this invocation, or None."""
+    text = _query_text(a)
+    return query.parse(text) if text else None
+
+
 def _predicate_from_args(a: argparse.Namespace):
     """Compile the effective query into a `(dive_record) -> bool` callable,
-    or None when no query was given."""
-    text = _query_text(a)
-    return query.predicate(text) if text else None
-
-
-def _describe_period(period: str) -> str:
-    """Resolve a period to a concrete label: 'year 2026', 'month 2026-02',
-    a single date, or a 'DD-MM-YYYY to DD-MM-YYYY' range."""
-    try:
-        lo, hi = parse_period(period)
-    except ValueError:
-        return period
-    if lo == hi:
-        return format_date_es(lo)
-    if lo.endswith("-01-01") and hi.endswith("-12-31") and lo[:4] == hi[:4]:
-        return f"year {lo[:4]}"
-    if lo[:7] == hi[:7] and lo.endswith("-01"):
-        return f"month {lo[:7]}"
-    return f"{format_date_es(lo)} to {format_date_es(hi)}"
+    or None when no filter expression was given."""
+    q = _parse_query(a)
+    if q is None or q.expr is None:
+        return None
+    return lambda rec: query.match(q.expr, rec)
 
 
 def _plural(word: str) -> str:
@@ -258,7 +183,7 @@ def _plural(word: str) -> str:
 
 
 def _describe_filters(a: argparse.Namespace) -> str:
-    """Human-readable summary of the active filters, as the user typed them."""
+    """Human-readable summary of the active filters (query + scope)."""
     p = []
     if getattr(a, "range", None):
         lo, hi = parse_number_range(a.range)
@@ -266,62 +191,15 @@ def _describe_filters(a: argparse.Namespace) -> str:
             p.append(f"#{lo}")
         else:
             p.append(f"#{lo if lo is not None else '…'}–{hi if hi is not None else '…'}")
-    if getattr(a, "period", None):
-        p.append(_describe_period(a.period))
-    if a.year:
-        p.append(f"year {a.year}")
-    if a.date_from or a.date_to:
-        lo = format_date_es(parse_date(a.date_from)) if a.date_from else "…"
-        hi = format_date_es(parse_date(a.date_to)) if a.date_to else "…"
-        p.append(f"{lo} to {hi}")
-    if a.tanksize is not None:
-        p.append(f"tank {a.tanksize:g}L")
-    if getattr(a, "exclude_tanksize", None) is not None:
-        p.append(f"without {a.exclude_tanksize:g}L tank")
-    if a.place:
-        p.append(f"place '{a.place}'")
-    if a.country:
-        p.append(f"country '{a.country}'")
-    if getattr(a, "region", None):
-        p.append(f"region '{a.region}'")
-    if a.buddy:
-        p.append(f"buddy '{a.buddy}'")
-    if getattr(a, "tag", None):
-        p.append(f"#{a.tag.lstrip('#')}")
-    if a.comment:
-        p.append(f"comment '{a.comment}'")
-    for label, terms in (("place", getattr(a, "exclude_place", None)),
-                         ("country", getattr(a, "exclude_country", None)),
-                         ("region", getattr(a, "exclude_region", None)),
-                         ("buddy", getattr(a, "exclude_buddy", None)),
-                         ("comment", getattr(a, "exclude_comment", None))):
-        if terms:
-            p.append(f"not {label} " + ", ".join(f"'{t}'" for t in terms))
-    if a.min_depth is not None:
-        p.append(f"depth ≥{a.min_depth:g}m")
-    if a.max_depth is not None:
-        p.append(f"depth ≤{a.max_depth:g}m")
-    if a.min_divetime is not None:
-        p.append(f"≥{a.min_divetime:g} min")
-    if getattr(a, "min_sac", None) is not None:
-        p.append(f"SAC ≥{a.min_sac:g} L/min")
-    if getattr(a, "max_sac", None) is not None:
-        p.append(f"SAC ≤{a.max_sac:g} L/min")
-    if a.water is not None:
-        p.append("salt water" if a.water == 1 else "fresh water")
-    if getattr(a, "weekend", None) is not None:
-        p.append("weekend" if a.weekend else "weekday")
-    if getattr(a, "night", None) is not None:
-        p.append("night dives" if a.night else "day dives")
+    qtext = _query_text(a)
+    if qtext:
+        p.append(f"query '{qtext}'")
     if a.all_divers:
         p.append("all divers")
     elif a.diver is not None:
         p.append(f"diver {a.diver}")
     if a.include_deleted:
         p.append("incl. deleted")
-    qtext = _query_text(a)
-    if qtext:
-        p.append(f"query '{qtext}'")
     return ", ".join(p) if p else "all dives"
 
 
@@ -400,39 +278,25 @@ def _fmt(v) -> str:
     return str(v)
 
 
-# user alias -> dive column for `list --sort` (SAC is sorted in Python)
-SORT_FIELDS = {
-    "number": "Number", "date": "Divedate", "divedate": "Divedate",
-    "entrytime": "Entrytime", "time": "Divetime", "divetime": "Divetime",
-    "depth": "Depth", "maxdepth": "Depth", "avgdepth": "DepthAvg",
-    "depthavg": "DepthAvg", "watertemp": "Watertemp", "temp": "Watertemp",
-    "airtemp": "Airtemp", "o2": "O2", "tanksize": "Tanksize",
-    "place": "Place", "country": "Country", "region": "Region", "sac": "SAC",
-}
-
-
 def cmd_list(db: DiveMate, a: argparse.Namespace) -> None:
     # a leading N-M token is the dive-number range; the rest is the query
     words = list(a.query_words or [])
     a.range = words.pop(0) if words and _looks_like_range(words[0]) else None
     a.query_words = words
     f = _filter_from_args(a)
-    key = (a.sort or "date").strip().lower()
-    if key not in SORT_FIELDS:
-        raise ValueError(f"cannot sort by {a.sort!r}. Fields: "
-                         + ", ".join(sorted(set(SORT_FIELDS.values()))))
-    col = SORT_FIELDS[key]
-    pred = _predicate_from_args(a)
-    desc = not a.asc  # default: highest first
-    if col == "SAC":
-        rows = db.dives(f, predicate=pred)
-        # None sorts last regardless of direction
-        rows.sort(key=lambda r: (r.get("SAC") is None,
-                                 -(r.get("SAC") or 0) if desc else (r.get("SAC") or 0)))
-    else:
-        rows = db.dives(f, order=col, desc=desc, predicate=pred)
-    if a.limit:
-        rows = rows[:a.limit]
+    q = _parse_query(a)
+    pred = (lambda rec: query.match(q.expr, rec)) if (q and q.expr is not None) else None
+    rows = db.dives(f, predicate=pred)
+    # sort: query `sort FIELD [asc|desc]`, default newest-first by date
+    sort_field = q.sort if (q and q.sort) else "date"
+    desc = q.desc if (q and q.sort) else True
+    key = query.sort_key(sort_field)
+    present = [r for r in rows if key(r) is not None]
+    missing = [r for r in rows if key(r) is None]
+    present.sort(key=key, reverse=desc)
+    rows = present + missing          # missing values always last
+    if q and q.limit:
+        rows = rows[:q.limit]
     if a.json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
         return
@@ -672,16 +536,7 @@ def _graph_count(db: DiveMate, a: argparse.Namespace) -> None:
     filt = _filter_from_args(a)
     rows = db.group_count(by, filt, order="value", predicate=_predicate_from_args(a))
     counts = {r["value"]: r["dives"] for r in rows}
-    # --from / --to also fix the axis extent (zero-filled up to those dates)
-    keys = set(counts)
-    period = {"year": lambda iso: iso[:4],
-              "month": lambda iso: iso[:7],
-              "week": _week_monday}[by]
-    if filt.date_from:
-        keys.add(period(filt.date_from))
-    if filt.date_to:
-        keys.add(period(filt.date_to))
-    labels = _fill_periods(sorted(keys), by)
+    labels = _fill_periods(sorted(counts), by)
     ys: list[float | None] = [counts.get(lbl, 0) for lbl in labels]
     if a.json:
         print(json.dumps([{"period": lbl, "dives": counts.get(lbl, 0)}
@@ -694,11 +549,8 @@ def _graph_count(db: DiveMate, a: argparse.Namespace) -> None:
     step = max(1, len(labels) // 8)
     xticks = [(float(i), labels[i]) for i in range(0, len(labels), step)]
     from .chart import series_chart
-    # title shows the actual plotted span (first..last period) plus any non-date
-    # filters; the start is the first dive when no --from was given
-    a2 = argparse.Namespace(**vars(a))
-    a2.period = a2.date_from = a2.date_to = a2.year = None
-    rest = _describe_filters(a2)
+    # title shows the plotted span (first..last period) plus the active filters
+    rest = _describe_filters(a)
     span = f"{labels[0]} to {labels[-1]}"
     title = f"dives per {by} — {span}" + (f", {rest}" if rest != "all dives" else "")
     for line in series_chart(xs, ys, title=title, ylabel="dives",
@@ -906,15 +758,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="output JSON")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    pl = sub.add_parser("list", help="list dives matching filters")
+    pl = sub.add_parser("list", help="list dives matching a query "
+                        "(sort/limit go in the query, e.g. '... sort depth desc limit 10')")
     _add_filter_args(pl)
     pl.add_argument("--columns", help="comma-separated column list")
-    pl.add_argument("--sort", metavar="FIELD",
-                    help="sort by: date (default), number, depth, avgdepth, "
-                         "divetime, watertemp, tanksize, sac, place, country, region")
-    pl.add_argument("--asc", action="store_true",
-                    help="ascending order (default: descending, highest first)")
-    pl.add_argument("--limit", type=int, help="show only the first N dives")
     pl.set_defaults(func=cmd_list)
 
     pi = sub.add_parser("info", help="show every detail of one dive by its number")

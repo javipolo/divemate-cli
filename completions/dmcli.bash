@@ -18,15 +18,15 @@ _dmcli() {
     fi
     local opts=""
     case "$cmd" in
-    list) opts="-h --help -q --query --year --period --from --to --tank --tanksize --exclude-tank --place --country --region --buddy --comment --exclude-place --exclude-country --exclude-region --exclude-buddy --exclude-comment --tag --min-depth --max-depth --min-divetime --min-sac --max-sac --water --weekend --weekday --night --day --include-deleted --diver --all-divers --columns --sort --asc --limit" ;;
+    list) opts="-h --help -q --query --include-deleted --diver --all-divers --columns" ;;
     info) opts="-h --help -t --temp --diver --all-divers --include-deleted last first" ;;
-    count) opts="-h --help -q --query --year --period --from --to --tank --tanksize --exclude-tank --place --country --region --buddy --comment --exclude-place --exclude-country --exclude-region --exclude-buddy --exclude-comment --tag --min-depth --max-depth --min-divetime --min-sac --max-sac --water --weekend --weekday --night --day --include-deleted --diver --all-divers" ;;
-    graph) opts="-h --help --by --desc -q --query --year --period --from --to --tank --tanksize --exclude-tank --place --country --region --buddy --comment --exclude-place --exclude-country --exclude-region --exclude-buddy --exclude-comment --tag --min-depth --max-depth --min-divetime --min-sac --max-sac --water --weekend --weekday --night --day --include-deleted --diver --all-divers avgdepth depth depthavg divetime maxdepth rmv sac temp time watertemp count" ;;
-    stats) opts="-h --help -q --query --year --period --from --to --tank --tanksize --exclude-tank --place --country --region --buddy --comment --exclude-place --exclude-country --exclude-region --exclude-buddy --exclude-comment --tag --min-depth --max-depth --min-divetime --min-sac --max-sac --water --weekend --weekday --night --day --include-deleted --diver --all-divers" ;;
-    group) opts="-h --help --limit --sort -q --query --year --period --from --to --tank --tanksize --exclude-tank --place --country --region --buddy --comment --exclude-place --exclude-country --exclude-region --exclude-buddy --exclude-comment --tag --min-depth --max-depth --min-divetime --min-sac --max-sac --water --weekend --weekday --night --day --include-deleted --diver --all-divers Boat Buddy Computer Country Deco Divemaster Divesuit Divetype Entry O2 Place Rating Tanksize Tanktype UWCurrent Water Waves Weather year month week weekend night buddy region" ;;
-    years) opts="-h --help -q --query --year --period --from --to --tank --tanksize --exclude-tank --place --country --region --buddy --comment --exclude-place --exclude-country --exclude-region --exclude-buddy --exclude-comment --tag --min-depth --max-depth --min-divetime --min-sac --max-sac --water --weekend --weekday --night --day --include-deleted --diver --all-divers" ;;
+    count) opts="-h --help -q --query --include-deleted --diver --all-divers" ;;
+    graph) opts="-h --help --by --desc -q --query --include-deleted --diver --all-divers avgdepth depth depthavg divetime maxdepth rmv sac temp time watertemp count" ;;
+    stats) opts="-h --help -q --query --include-deleted --diver --all-divers" ;;
+    group) opts="-h --help --limit --sort -q --query --include-deleted --diver --all-divers Boat Buddy Computer Country Deco Divemaster Divesuit Divetype Entry O2 Place Rating Tanksize Tanktype UWCurrent Water Waves Weather year month week weekend night buddy region" ;;
+    years) opts="-h --help -q --query --include-deleted --diver --all-divers" ;;
     tanks) opts="-h --help" ;;
-    tags) opts="-h --help -q --query --year --period --from --to --tank --tanksize --exclude-tank --place --country --region --buddy --comment --exclude-place --exclude-country --exclude-region --exclude-buddy --exclude-comment --tag --min-depth --max-depth --min-divetime --min-sac --max-sac --water --weekend --weekday --night --day --include-deleted --diver --all-divers" ;;
+    tags) opts="-h --help -q --query --include-deleted --diver --all-divers" ;;
     divers) opts="-h --help" ;;
     completion) opts="-h --help bash" ;;
     pull) opts="-h --help --key --folder --name --out" ;;
