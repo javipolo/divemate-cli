@@ -5,7 +5,7 @@ CONFDIR ?= $(or $(XDG_CONFIG_HOME),$(HOME)/.config)/divemate-cli
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build install config completion hooks clean
+.PHONY: help build install config completion lint hooks clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -30,6 +30,9 @@ config: ## Install the example config to ~/.config/divemate-cli (won't overwrite
 completion: ## Regenerate completions/dmcli.bash from the CLI parser
 	python -m divemate.cli completion bash > completions/dmcli.bash
 	@echo "wrote completions/dmcli.bash"
+
+lint: ## Lint the codebase with ruff (config in pyproject.toml)
+	ruff check .
 
 hooks: ## Enable the project git hooks (.githooks) — regenerates completion on commit
 	chmod +x .githooks/*

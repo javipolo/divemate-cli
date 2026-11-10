@@ -12,6 +12,9 @@ if git diff --cached --name-only | grep -qE '^divemate/cli\.py$'; then
     git add "$repo/completions/dmcli.bash"
 fi
 
+# Lint the project (aborts the commit on any ruff error).
+make -C "$repo" lint
+
 # Chain to the original hook if present (hooksPath replaces .git/hooks).
 orig="$repo/.git/hooks/pre-commit"
 [ -x "$orig" ] && "$orig" "$@"
