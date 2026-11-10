@@ -210,6 +210,7 @@ _GRAMMAR = r"""
         | and_expr
 
 ?and_expr: and_expr AND not_expr -> and_op
+         | and_expr not_expr     -> and_juxta
          | not_expr
 
 ?not_expr: NOT not_expr          -> not_op
@@ -242,6 +243,11 @@ class _ToAst(Transformer):
         return Or(items)
 
     def and_op(self, a, _tok, b):
+        items = (a.items if isinstance(a, And) else [a]) + [b]
+        return And(items)
+
+    def and_juxta(self, a, b):
+        # two adjacent terms with no operator mean AND
         items = (a.items if isinstance(a, And) else [a]) + [b]
         return And(items)
 

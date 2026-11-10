@@ -202,6 +202,8 @@ dmcli group region --query 'night and divetime>50'
 
 Grammar: boolean `and` / `or` / `not` (case-insensitive) with parentheses;
 leaves are `field op value` comparisons (or a bare boolean field like `night`).
+`and` is also implicit between adjacent terms — `region~mallorca period=2025` is
+the same as `region~mallorca and period=2025`.
 Operators by field type:
 
 | Field type | Operators | `=` means |

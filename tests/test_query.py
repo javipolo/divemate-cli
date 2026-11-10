@@ -164,6 +164,17 @@ def test_water_mapping():
 
 # --- composition -----------------------------------------------------------
 
+def test_implicit_and_by_juxtaposition():
+    # adjacent terms with no operator mean AND
+    assert q.parse("region~mall period=2025") == q.parse("region~mall and period=2025")
+    assert q.parse("night weekend depth>30") == And(
+        [Flag("night"), Flag("weekend"), Compare("depth", ">", "30")])
+    assert ev("place~toro region=Mallorca") is True
+    assert ev("place~toro region=Catalunya") is False
+    # mixes with explicit or/parentheses
+    assert ev("region=Mallorca (place~toro or place~cala)") is True
+
+
 def test_full_expression():
     assert ev("(region=Mallorca and place~toro) or region=Catalunya") is True
     assert ev("region=Catalunya or (depth>30 and night)") is False
