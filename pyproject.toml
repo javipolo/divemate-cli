@@ -23,6 +23,11 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["divemate"]
 
+[tool.pytest.ini_options]
+# anyio's pytest plugin is auto-loaded but unused here, and it emits a
+# deprecation warning on newer pytest — disable it.
+addopts = "-p no:anyio"
+
 [tool.ruff]
 line-length = 100
 
