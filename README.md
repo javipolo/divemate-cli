@@ -206,10 +206,15 @@ Operators by field type:
 
 | Field type | Operators | `=` means |
 |------------|-----------|-----------|
-| text (`place`, `country`, `region`, `comment`, `buddy`, `water`) | `=` `!=` `~` `!~` | exact match (case-insensitive); `~` = contains |
+| text (`place`, `country`, `region`, `comment`, `tag`, `buddy`, `water`) | `=` `!=` `~` `!~` | exact match (case-insensitive); `~` = contains |
 | number (`depth`/`maxdepth`, `avgdepth`, `divetime`/`time`, `watertemp`/`temp`, `airtemp`, `o2`, `tanksize`/`tank`, `sac`/`rmv`, `number`, `year`) | `=` `!=` `<` `<=` `>` `>=` | equal |
 | date (`date`, ISO `YYYY-MM-DD`) | `=` `!=` `<` `<=` `>` `>=` | equal |
 | boolean (`night`, `weekend`) | bare flag, or `=true` / `=false` | — |
+
+`tag=cave` matches a `#cave` tag in the comments (give it without the `#`), the
+same tags `dmcli tags` lists. There is no `period` query field — it is a
+date-range shortcut; filter dates in a query with `date` / `year`, or pass the
+`--period` flag (it ANDs with `--query`).
 
 Values are barewords (`region=Mallorca`, accents are fine); quote anything with
 spaces or punctuation: `place="el toro"`. Multi-valued fields (`buddy`,

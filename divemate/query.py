@@ -30,6 +30,7 @@ contain spaces/punctuation (`place="el toro"`).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field as _dc_field
 from typing import Any, Callable
 
@@ -138,6 +139,14 @@ def _buddies(rec: dict) -> list[str]:
     return out
 
 
+# a #tag in the comments: hash + word chars (unicode-aware), matches db.tags()
+_TAG_RE = re.compile(r"#(\w+)", re.UNICODE)
+
+
+def _tags(rec: dict) -> list[str]:
+    return _TAG_RE.findall(rec.get("Comments") or "")
+
+
 def _col(name: str) -> Callable[[dict], Any]:
     return lambda rec: rec.get(name)
 
@@ -148,6 +157,7 @@ _SPECS = [
     FieldSpec("country", TEXT, _col("Country"), sql="L.Country"),
     FieldSpec("region", TEXT, _col("Region"), sql="P.Region", needs=("place",)),
     FieldSpec("comment", TEXT, _col("Comments"), sql="L.Comments"),
+    FieldSpec("tag", TEXT, _tags, multi=True),
     FieldSpec("buddy", TEXT, _buddies, multi=True),
     FieldSpec("depth", NUMBER, _col("Depth"), sql="L.Depth"),
     FieldSpec("avgdepth", NUMBER, _col("DepthAvg"), sql="L.DepthAvg"),

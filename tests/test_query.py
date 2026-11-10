@@ -124,6 +124,13 @@ def test_multivalued_tank_and_buddy():
     assert ev("buddy~isa") is True
 
 
+def test_tag_field():
+    assert ev("tag=cave") is True        # record has "#cave" in comments
+    assert ev("tag~cav") is True
+    assert ev("tag=sidemount") is False
+    assert ev("not tag=cave") is False
+
+
 def test_bool_flags_and_equality():
     assert ev("night") is True
     assert ev("weekend") is True
