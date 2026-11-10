@@ -226,7 +226,7 @@ _GRAMMAR = r"""
 OR: "or"i
 AND: "and"i
 NOT: "not"i
-OP.2: ">=" | "<=" | "!=" | "!~" | "=" | "~" | ">" | "<"
+OP.2: "!==" | "==" | ">=" | "<=" | "!=" | "!~" | "=" | "~" | ">" | "<"
 FIELD: /[a-zA-Z_][a-zA-Z0-9_]*/
 STRING: /"[^"]*"/ | /'[^']*'/
 RAW: /[^\s()=~<>!'"]+/
@@ -270,8 +270,9 @@ class _ToAst(Transformer):
 _PARSER = Lark(_GRAMMAR, parser="lalr", transformer=_ToAst())
 
 
-_TEXT_OPS = {"=", "!=", "~", "!~"}
-_NUM_OPS = {"=", "!=", "<", "<=", ">", ">="}
+# text: `=` and `~` both mean "contains"; `==` is exact (and their `!` negations)
+_TEXT_OPS = {"=", "==", "~", "!=", "!==", "!~"}
+_NUM_OPS = {"=", "==", "!=", "!==", "<", "<=", ">", ">="}
 
 
 def _expand(node: Node) -> Node:
@@ -285,14 +286,14 @@ def _expand(node: Node) -> Node:
     if isinstance(node, Flag) and node.field.lower() == "period":
         raise ValueError("period needs a value, e.g. period=\"last year\"")
     if isinstance(node, Compare) and node.field.lower() == "period":
-        if node.op not in ("=", "!="):
+        if node.op not in ("=", "==", "!=", "!=="):
             raise ValueError("period only supports = and != (it is a date range)")
         try:
             lo, hi = parse_period(node.value)
         except ValueError as e:
             raise ValueError(f"invalid period {node.value!r}: {e}") from None
         rng = And([Compare("date", ">=", lo), Compare("date", "<=", hi)])
-        return Not(rng) if node.op == "!=" else rng
+        return Not(rng) if node.op in ("!=", "!==") else rng
     return node
 
 
@@ -344,14 +345,14 @@ def _as_list(spec: FieldSpec, rec: dict) -> list[Any]:
 def _cmp_text(op: str, values: list[Any], target: str) -> bool:
     t = target.casefold()
     svals = [str(v).casefold() for v in values if v not in (None, "")]
-    if op == "=":
-        return any(v == t for v in svals)
-    if op == "!=":
-        return all(v != t for v in svals)
-    if op == "~":
+    if op in ("=", "~"):           # contains
         return any(t in v for v in svals)
-    if op == "!~":
+    if op in ("!=", "!~"):         # does not contain
         return all(t not in v for v in svals)
+    if op == "==":                 # exact
+        return any(v == t for v in svals)
+    if op == "!==":                # not exact
+        return all(v != t for v in svals)
     return False
 
 
@@ -366,6 +367,7 @@ def _cmp_number(op: str, values: list[Any], target: str) -> bool:
             nums.append(float(v))
         except (TypeError, ValueError):
             continue
+    op = {"==": "=", "!==": "!="}.get(op, op)   # == / !== are equality for numbers
     ops = {"=": lambda x: x == n, "!=": lambda x: x != n,
            "<": lambda x: x < n, "<=": lambda x: x <= n,
            ">": lambda x: x > n, ">=": lambda x: x >= n}
@@ -378,6 +380,7 @@ def _cmp_number(op: str, values: list[Any], target: str) -> bool:
 def _cmp_date(op: str, values: list[Any], target: str) -> bool:
     # ISO dates compare correctly as strings
     svals = [str(v)[:10] for v in values if v]
+    op = {"==": "=", "!==": "!="}.get(op, op)
     ops = {"=": lambda x: x == target, "!=": lambda x: x != target,
            "<": lambda x: x < target, "<=": lambda x: x <= target,
            ">": lambda x: x > target, ">=": lambda x: x >= target}
@@ -400,7 +403,7 @@ def _cmp_bool(op: str, value: Any, target: str) -> bool:
     else:
         raise ValueError(f"query: expected true/false, got {target!r}")
     got = bool(value)
-    return got == want if op == "=" else got != want
+    return got == want if op in ("=", "==") else got != want
 
 
 def _truthy(spec: FieldSpec, rec: dict) -> bool:

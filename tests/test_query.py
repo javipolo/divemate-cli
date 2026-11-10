@@ -72,26 +72,29 @@ def test_bareword_accents():
 
 # --- text operators --------------------------------------------------------
 
-def test_text_exact_is_case_insensitive():
-    assert ev("region=mallorca") is True
-    assert ev("region=MALLORCA") is True
-    assert ev("region=catalunya") is False
-
-
-def test_text_exact_is_not_substring():
-    assert ev("region=mall") is False
-
-
-def test_text_contains():
+def test_eq_and_tilde_both_mean_contains():
+    # = and ~ are synonyms: substring, case-insensitive
+    assert ev("region=mall") is True
+    assert ev("region~mall") is True
+    assert ev("region=MALL") is True
+    assert ev("place=toro") is True
     assert ev("place~toro") is True
-    assert ev("place~shark") is False
+    assert ev("place=shark") is False
+
+
+def test_double_eq_is_exact():
+    assert ev("region==Mallorca") is True
+    assert ev("region==mallorca") is True          # case-insensitive
+    assert ev("region==mall") is False             # not a substring match
+    assert ev("place==toro") is False              # full value is "El Toro. Boya 3"
 
 
 def test_text_negations():
-    assert ev("region!=mallorca") is False
+    assert ev("region!=mall") is False             # !=/!~ = does not contain
+    assert ev("region!~mall") is False
     assert ev("region!=catalunya") is True
-    assert ev("place!~shark") is True
-    assert ev("place!~toro") is False
+    assert ev("region!==Mallorca") is False        # !== = not exact
+    assert ev("region!==mall") is True
 
 
 # --- number / date operators ----------------------------------------------

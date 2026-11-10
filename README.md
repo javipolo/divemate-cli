@@ -208,10 +208,14 @@ Operators by field type:
 
 | Field type | Operators | `=` means |
 |------------|-----------|-----------|
-| text (`place`, `country`, `region`, `comment`, `tag`, `buddy`, `water`) | `=` `!=` `~` `!~` | exact match (case-insensitive); `~` = contains |
-| number (`depth`/`maxdepth`, `avgdepth`, `divetime`/`time`, `watertemp`/`temp`, `airtemp`, `o2`, `tanksize`/`tank`, `sac`/`rmv`, `number`, `year`) | `=` `!=` `<` `<=` `>` `>=` | equal |
-| date (`date`, ISO `YYYY-MM-DD`) | `=` `!=` `<` `<=` `>` `>=` | equal |
+| text (`place`, `country`, `region`, `comment`, `tag`, `buddy`, `water`) | `=` `~` (contains), `==` (exact), `!=` `!~` (not contains), `!==` (not exact) | contains (case-insensitive) |
+| number (`depth`/`maxdepth`, `avgdepth`, `divetime`/`time`, `watertemp`/`temp`, `airtemp`, `o2`, `tanksize`/`tank`, `sac`/`rmv`, `number`, `year`) | `=` `==` `!=` `!==` `<` `<=` `>` `>=` | equal |
+| date (`date`, ISO `YYYY-MM-DD`) | `=` `==` `!=` `!==` `<` `<=` `>` `>=` | equal |
 | boolean (`night`, `weekend`) | bare flag, or `=true` / `=false` | — |
+
+For text, `=` and `~` are synonyms (substring match); use `==` for an exact,
+whole-value match — e.g. `place=tossa` matches any Tossa site, `place=="Tossa de
+Mar"` only that exact place. On numbers/dates `=` and `==` both mean equal.
 
 `tag=cave` matches a `#cave` tag in the comments (give it without the `#`), the
 same tags `dmcli tags` lists.

@@ -17,8 +17,8 @@ DEFAULT_DB = os.environ.get("DIVEMATE_DB", "DiveMate.ddb")
 def _add_filter_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("-q", "--query", metavar="EXPR",
                    help="filter expression, e.g. '(region=Mallorca and place~toro) "
-                        "or depth>=30'. Operators: text = (exact) ~ (contains) "
-                        "!= !~; numbers = != < <= > >=; booleans night/weekend; "
+                        "or depth>=30'. Operators: text = ~ (contains) == (exact) "
+                        "!= !~ !==; numbers = != < <= > >=; booleans night/weekend; "
                         "period=\"last year\" as a date-range shortcut. "
                         "Combines with the other filters using AND.")
     p.add_argument("--year", type=int, help="dive year, e.g. 2026")
