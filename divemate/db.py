@@ -10,7 +10,7 @@ import re
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 
 @dataclass
@@ -335,13 +335,22 @@ class DiveMate:
     # ---- queries ---------------------------------------------------------
 
     def dives(self, f: DiveFilter | None = None, order: str = "Divedate",
-              desc: bool = False) -> list[dict[str, Any]]:
-        """Return dives matching the filter as a list of dicts."""
+              desc: bool = False,
+              predicate: Callable[[dict[str, Any]], bool] | None = None
+              ) -> list[dict[str, Any]]:
+        """Return dives matching the filter as a list of dicts.
+
+        `predicate` is an optional `--query` callable applied in Python after the
+        SQL filter (the two combine with AND). Records are enriched with buddy
+        names and tank sizes so the query can reach those fields.
+        """
         f = f or DiveFilter()
         where, params, needs_tank, _ = self._where(f)
         # always LEFT JOIN Place so Region is available as a column / sort key
         join = self._joins(needs_tank, needs_place=True)
         cols = ", ".join(f"L.{c}" for c in DIVE_COLUMNS) + ", P.Region AS Region"
+        if predicate is not None:
+            cols += ", L.BuddyIDs AS BuddyIDs"
         # DISTINCT so a dive with several matching tanks is not duplicated
         direction = "DESC" if desc else "ASC"
         # Region is an alias (Place column), not L.*; everything else is on L
@@ -357,7 +366,30 @@ class DiveMate:
                 if r.get(c) == EMPTY_SENTINEL:
                     r[c] = None
             r["SAC"] = sac.get(r["ID"])
+        if predicate is not None:
+            rows = self._apply_query(rows, predicate)
         return rows
+
+    def _apply_query(self, rows: list[dict[str, Any]],
+                     predicate: Callable[[dict[str, Any]], bool]
+                     ) -> list[dict[str, Any]]:
+        """Enrich rows with buddy names + tank sizes, keep those the query
+        matches, then drop the helper keys so output shape is unchanged."""
+        tanks: dict[int, list[float]] = {}
+        for r in self.conn.execute("SELECT LogID, Tanksize FROM Tank"):
+            if r["Tanksize"]:
+                tanks.setdefault(r["LogID"], []).append(r["Tanksize"])
+        names = self.buddy_names()
+        for r in rows:
+            r["tank_sizes"] = tanks.get(r["ID"], [])
+            r["buddies"] = [names.get(b, f"#{b}")
+                            for b in self._parse_ids(r.get("BuddyIDs"))]
+        kept = [r for r in rows if predicate(r)]
+        for r in kept:
+            r.pop("BuddyIDs", None)
+            r.pop("tank_sizes", None)
+            r.pop("buddies", None)
+        return kept
 
     def dive_full(self, number: int, diver: int | None = None,
                   all_divers: bool = False,
@@ -455,16 +487,40 @@ class DiveMate:
                "FROM Tank WHERE LogID = ? ORDER BY SortOrd")
         return [dict(r) for r in self.conn.execute(sql, (log_id,))]
 
-    def count(self, f: DiveFilter | None = None) -> int:
+    def _query_ids(self, f: DiveFilter,
+                   predicate: Callable[[dict[str, Any]], bool]) -> list[int]:
+        """IDs of dives matching both the SQL filter and the --query predicate."""
+        return [r["ID"] for r in self.dives(f, predicate=predicate)]
+
+    def _agg_where(self, f: DiveFilter,
+                   predicate: Callable[[dict[str, Any]], bool] | None
+                   ) -> tuple[str, list[Any], bool, bool]:
+        """Like `_where`, but for aggregate queries: when a --query predicate is
+        given, narrow to the dive IDs it matches (evaluated in Python first)."""
+        where, params, needs_tank, needs_place = self._where(f)
+        if predicate is not None:
+            ids = self._query_ids(f, predicate)
+            ph = ", ".join("?" for _ in ids) if ids else "NULL"
+            clause = f"L.ID IN ({ph})"
+            where = f"{where} AND {clause}" if where else f" WHERE {clause}"
+            params = params + ids
+        return where, params, needs_tank, needs_place
+
+    def count(self, f: DiveFilter | None = None,
+              predicate: Callable[[dict[str, Any]], bool] | None = None) -> int:
         f = f or DiveFilter()
+        if predicate is not None:
+            return len(self.dives(f, predicate=predicate))
         where, params, needs_tank, needs_place = self._where(f)
         join = self._joins(needs_tank, needs_place)
         sql = f"SELECT COUNT(DISTINCT L.ID) FROM Logbook L{join}{where}"
         return self.conn.execute(sql, params).fetchone()[0]
 
-    def stats(self, f: DiveFilter | None = None) -> dict[str, Any]:
+    def stats(self, f: DiveFilter | None = None,
+              predicate: Callable[[dict[str, Any]], bool] | None = None
+              ) -> dict[str, Any]:
         """Aggregate stats over matching dives."""
-        rows = self.dives(f)
+        rows = self.dives(f, predicate=predicate)
         n = len(rows)
         if n == 0:
             return {"count": 0}
@@ -484,7 +540,9 @@ class DiveMate:
         }
 
     def group_count(self, column: str, f: DiveFilter | None = None,
-                    limit: int | None = None, order: str = "count") -> list[dict[str, Any]]:
+                    limit: int | None = None, order: str = "count",
+                    predicate: Callable[[dict[str, Any]], bool] | None = None
+                    ) -> list[dict[str, Any]]:
         """Count dives grouped by a field, ranked.
 
         `column` is case-insensitive and may be any field in GROUPABLE, or the
@@ -492,10 +550,10 @@ class DiveMate:
         `order`: 'count' (default, most dives first) or 'value' (by group value).
         """
         if column.strip().lower() in ("buddy", "buddies"):
-            return self.group_buddies(f, limit=limit, order=order)
+            return self.group_buddies(f, limit=limit, order=order, predicate=predicate)
         expr = self._group_expr(column)
         f = f or DiveFilter()
-        where, params, needs_tank, needs_place = self._where(f)
+        where, params, needs_tank, needs_place = self._agg_where(f, predicate)
         # grouping by region (P.Region) also needs the Place join
         join = self._joins(needs_tank, needs_place or "P." in expr)
         order_by = "dives DESC" if order == "count" else "value ASC"
@@ -509,11 +567,13 @@ class DiveMate:
         return [dict(r) for r in self.conn.execute(sql, params)]
 
     def group_buddies(self, f: DiveFilter | None = None, limit: int | None = None,
-                      order: str = "count") -> list[dict[str, Any]]:
+                      order: str = "count",
+                      predicate: Callable[[dict[str, Any]], bool] | None = None
+                      ) -> list[dict[str, Any]]:
         """Count dives per buddy, expanding Logbook.BuddyIDs. A dive with two
         buddies counts once for each, so totals can exceed the dive count."""
         f = f or DiveFilter()
-        where, params, needs_tank, needs_place = self._where(f)
+        where, params, needs_tank, needs_place = self._agg_where(f, predicate)
         join = self._joins(needs_tank, needs_place)
         sql = f"SELECT DISTINCT L.ID, L.BuddyIDs FROM Logbook L{join}{where}"
         names = self.buddy_names()
@@ -553,9 +613,11 @@ class DiveMate:
                             ["year", "month", "weekend", "night", "buddy", "region"])
         raise ValueError(f"cannot group by {column!r}. Allowed: {allowed}")
 
-    def dives_per_year(self, f: DiveFilter | None = None) -> list[dict[str, Any]]:
+    def dives_per_year(self, f: DiveFilter | None = None,
+                       predicate: Callable[[dict[str, Any]], bool] | None = None
+                       ) -> list[dict[str, Any]]:
         f = f or DiveFilter()
-        where, params, needs_tank, needs_place = self._where(f)
+        where, params, needs_tank, needs_place = self._agg_where(f, predicate)
         join = self._joins(needs_tank, needs_place)
         sql = (
             f"SELECT substr(L.Divedate,1,4) AS year, COUNT(DISTINCT L.ID) AS n "
@@ -564,12 +626,14 @@ class DiveMate:
         )
         return [dict(r) for r in self.conn.execute(sql, params)]
 
-    def tags(self, f: DiveFilter | None = None) -> list[dict[str, Any]]:
+    def tags(self, f: DiveFilter | None = None,
+             predicate: Callable[[dict[str, Any]], bool] | None = None
+             ) -> list[dict[str, Any]]:
         """Discover #tags used in comments, with dive counts, most-used first.
 
         Case-insensitive: #Sidemount and #sidemount count as one tag (lowercased).
         """
-        rows = self.dives(f)
+        rows = self.dives(f, predicate=predicate)
         counts: dict[str, int] = {}
         for r in rows:
             c = r.get("Comments") or ""

@@ -118,6 +118,7 @@ Accepted by `list`, `count`, `stats`, `group`, and `years`:
 
 | Flag | Meaning |
 |------|---------|
+| `-q EXPR` / `--query EXPR` | Filter expression — see [Query language](#query-language--query) |
 | `--year N` | Dives in calendar year N |
 | `--period PERIOD` | Quick range — see below |
 | `--from DD-MM-YYYY` | On or after this date (ISO also accepted) |
@@ -126,9 +127,15 @@ Accepted by `list`, `count`, `stats`, `group`, and `years`:
 | `--exclude-tank L` | Exclude dives that have a tank of L litres |
 | `--place TEXT` | Place name contains TEXT (case-insensitive) |
 | `--country TEXT` | Country contains TEXT |
+| `--region TEXT` | Dive-site region contains TEXT |
 | `--buddy TEXT` | Buddy field contains TEXT |
 | `--comment TEXT` | Comments contain TEXT |
 | `--tag NAME` | Comments contain `#NAME` (give it without the `#`) |
+| `--exclude-place TEXT` | Exclude dives whose place contains TEXT (repeatable) |
+| `--exclude-country TEXT` | Exclude dives whose country contains TEXT (repeatable) |
+| `--exclude-region TEXT` | Exclude dives whose region contains TEXT (repeatable) |
+| `--exclude-buddy TEXT` | Exclude dives with a matching buddy (repeatable) |
+| `--exclude-comment TEXT` | Exclude dives whose comments contain TEXT (repeatable) |
 | `--min-depth M` | Max depth ≥ M metres |
 | `--max-depth M` | Max depth ≤ M metres |
 | `--min-divetime MIN` | Dive time ≥ MIN minutes |
@@ -176,6 +183,40 @@ summed over the dive's tanks as `(start − end pressure) × tank size` and mean
 is `avg depth / 10 + 1`. It is in L/min, surface-equivalent. Only dives with a
 usable tank pressure drop, a dive time and a recorded average depth get a value;
 others show `—` and are skipped by `--min-sac`/`--max-sac`.
+
+The `--exclude-*` filters are repeatable and drop a dive if it matches **any** of
+the given terms, e.g. `--exclude-place manacor --exclude-place portocolom`.
+
+### Query language (`--query`)
+
+For anything the flags can't express — OR, grouping, negation, numeric
+comparisons — use `-q` / `--query` with a filter expression. It is accepted by
+the same commands as the other filters and **combines with them using AND**.
+
+```sh
+dmcli list  --query '(region=Mallorca and place~toro) or region=Catalunya'
+dmcli count --query 'maxdepth>=10'
+dmcli list  --country spain --query 'sac<18 or tank=15'
+dmcli group region --query 'night and divetime>50'
+```
+
+Grammar: boolean `and` / `or` / `not` (case-insensitive) with parentheses;
+leaves are `field op value` comparisons (or a bare boolean field like `night`).
+Operators by field type:
+
+| Field type | Operators | `=` means |
+|------------|-----------|-----------|
+| text (`place`, `country`, `region`, `comment`, `buddy`, `water`) | `=` `!=` `~` `!~` | exact match (case-insensitive); `~` = contains |
+| number (`depth`/`maxdepth`, `avgdepth`, `divetime`/`time`, `watertemp`/`temp`, `airtemp`, `o2`, `tanksize`/`tank`, `sac`/`rmv`, `number`, `year`) | `=` `!=` `<` `<=` `>` `>=` | equal |
+| date (`date`, ISO `YYYY-MM-DD`) | `=` `!=` `<` `<=` `>` `>=` | equal |
+| boolean (`night`, `weekend`) | bare flag, or `=true` / `=false` | — |
+
+Values are barewords (`region=Mallorca`, accents are fine); quote anything with
+spaces or punctuation: `place="el toro"`. Multi-valued fields (`buddy`,
+`tanksize`) match when **any** of the dive's values satisfies the comparison.
+Matching is done in Python over the selected dives (the dataset is one
+logbook), so the query is powerful without a SQL round-trip; unknown fields,
+bad operators and syntax errors are reported clearly.
 
 ### `list`
 

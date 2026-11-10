@@ -7,6 +7,7 @@ import json
 import os
 import sys
 
+from . import query
 from .db import DiveMate, DiveFilter
 from .dates import parse_date, parse_period, format_date_es
 
@@ -14,6 +15,11 @@ DEFAULT_DB = os.environ.get("DIVEMATE_DB", "DiveMate.ddb")
 
 
 def _add_filter_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("-q", "--query", metavar="EXPR",
+                   help="filter expression, e.g. '(region=Mallorca and place~toro) "
+                        "or depth>=30'. Operators: text = (exact) ~ (contains) "
+                        "!= !~; numbers = != < <= > >=; booleans night/weekend. "
+                        "Combines with the other filters using AND.")
     p.add_argument("--year", type=int, help="dive year, e.g. 2026")
     p.add_argument("--period", metavar="PERIOD",
                    help="quick range: 'this month', 'this year', 'year 2024', "
@@ -127,6 +133,13 @@ def _filter_from_args(a: argparse.Namespace) -> DiveFilter:
     )
 
 
+def _predicate_from_args(a: argparse.Namespace):
+    """Compile the --query expression into a `(dive_record) -> bool` callable,
+    or None when no --query was given."""
+    text = getattr(a, "query", None)
+    return query.predicate(text) if text else None
+
+
 def _describe_period(period: str) -> str:
     """Resolve a period to a concrete label: 'year 2026', 'month 2026-02',
     a single date, or a 'DD-MM-YYYY to DD-MM-YYYY' range."""
@@ -211,6 +224,8 @@ def _describe_filters(a: argparse.Namespace) -> str:
         p.append(f"diver {a.diver}")
     if a.include_deleted:
         p.append("incl. deleted")
+    if getattr(a, "query", None):
+        p.append(f"query '{a.query}'")
     return ", ".join(p) if p else "all dives"
 
 
@@ -307,14 +322,15 @@ def cmd_list(db: DiveMate, a: argparse.Namespace) -> None:
         raise ValueError(f"cannot sort by {a.sort!r}. Fields: "
                          + ", ".join(sorted(set(SORT_FIELDS.values()))))
     col = SORT_FIELDS[key]
+    pred = _predicate_from_args(a)
     desc = not a.asc  # default: highest first
     if col == "SAC":
-        rows = db.dives(f)
+        rows = db.dives(f, predicate=pred)
         # None sorts last regardless of direction
         rows.sort(key=lambda r: (r.get("SAC") is None,
                                  -(r.get("SAC") or 0) if desc else (r.get("SAC") or 0)))
     else:
-        rows = db.dives(f, order=col, desc=desc)
+        rows = db.dives(f, order=col, desc=desc, predicate=pred)
     if a.limit:
         rows = rows[:a.limit]
     if a.json:
@@ -504,7 +520,8 @@ def cmd_graph(db: DiveMate, a: argparse.Namespace) -> None:
         raise ValueError(f"cannot graph {a.field!r}. Fields: "
                          + ", ".join(sorted(set(f for f, _ in GRAPH_FIELDS.values()))))
     col, unit = GRAPH_FIELDS[key]
-    rows = db.dives(_filter_from_args(a), order="Divedate", desc=a.desc)
+    rows = db.dives(_filter_from_args(a), order="Divedate", desc=a.desc,
+                    predicate=_predicate_from_args(a))
     # value per dive; a 0 that means "no data" becomes a gap
     ys: list[float | None] = []
     for r in rows:
@@ -535,7 +552,7 @@ def _graph_count(db: DiveMate, a: argparse.Namespace) -> None:
     if by not in ("month", "year"):
         raise ValueError("--by must be 'month' or 'year'")
     filt = _filter_from_args(a)
-    rows = db.group_count(by, filt, order="value")
+    rows = db.group_count(by, filt, order="value", predicate=_predicate_from_args(a))
     counts = {r["value"]: r["dives"] for r in rows}
     # --from / --to also fix the axis extent (zero-filled up to those dates)
     keys = set(counts)
@@ -586,11 +603,11 @@ def _date_xticks(rows: list[dict], n: int = 6) -> list[tuple[float, str]]:
 
 
 def cmd_count(db: DiveMate, a: argparse.Namespace) -> None:
-    print(db.count(_filter_from_args(a)))
+    print(db.count(_filter_from_args(a), predicate=_predicate_from_args(a)))
 
 
 def cmd_stats(db: DiveMate, a: argparse.Namespace) -> None:
-    s = db.stats(_filter_from_args(a))
+    s = db.stats(_filter_from_args(a), predicate=_predicate_from_args(a))
     if a.json:
         print(json.dumps(s, ensure_ascii=False, indent=2))
         return
@@ -627,7 +644,8 @@ def _stats_lines(s: dict) -> list[tuple[str, str]]:
 
 
 def cmd_group(db: DiveMate, a: argparse.Namespace) -> None:
-    rows = db.group_count(a.by, _filter_from_args(a), limit=a.limit, order=a.sort)
+    rows = db.group_count(a.by, _filter_from_args(a), limit=a.limit, order=a.sort,
+                          predicate=_predicate_from_args(a))
     if a.json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
         return
@@ -650,7 +668,7 @@ def cmd_group(db: DiveMate, a: argparse.Namespace) -> None:
 
 
 def cmd_years(db: DiveMate, a: argparse.Namespace) -> None:
-    rows = db.dives_per_year(_filter_from_args(a))
+    rows = db.dives_per_year(_filter_from_args(a), predicate=_predicate_from_args(a))
     if a.json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
         return
@@ -666,7 +684,7 @@ def cmd_tanks(db: DiveMate, a: argparse.Namespace) -> None:
 
 
 def cmd_tags(db: DiveMate, a: argparse.Namespace) -> None:
-    rows = db.tags(_filter_from_args(a))
+    rows = db.tags(_filter_from_args(a), predicate=_predicate_from_args(a))
     if a.json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
         return
