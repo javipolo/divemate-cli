@@ -201,6 +201,18 @@ def profile_chart(times: list[float], depths: list[float],
         width = max(40, min(90, term_width() - 2))
     plt.clf()
     plt.theme("clear")
+
+    # draw temperature FIRST so depth is plotted on top of it (plotext lets the
+    # last series win a shared cell) — depth must stay readable where they cross
+    have_temp = show_temp and bool(temps) and any(t is not None for t in temps)
+    if have_temp:
+        xt = [x for x, t in zip(times, temps) if t is not None]  # type: ignore[arg-type]
+        yt = [t for t in temps if t is not None]                 # type: ignore[union-attr]
+        plt.plot(xt, yt, yside="right", color="red+", label="temp (°C)")
+        import math
+        tticks = _int_ticks(math.floor(min(yt)), math.ceil(max(yt)), 7)
+        plt.yticks(tticks, [str(t) for t in tticks], yside="right")
+
     # negate depth so the surface (0) sits at the top; relabel ticks positive
     plt.plot(times, [-d for d in depths], yside="left", color="blue+",
              label="depth (m)")
@@ -213,15 +225,6 @@ def profile_chart(times: list[float], depths: list[float],
     tmax = int(round(times[-1])) or 1
     xticks = _int_ticks(0, tmax, 6)
     plt.xticks(xticks, [str(t) for t in xticks])
-
-    have_temp = show_temp and bool(temps) and any(t is not None for t in temps)
-    if have_temp:
-        xt = [x for x, t in zip(times, temps) if t is not None]  # type: ignore[arg-type]
-        yt = [t for t in temps if t is not None]                 # type: ignore[union-attr]
-        plt.plot(xt, yt, yside="right", color="red+", label="temp (°C)")
-        import math
-        tticks = _int_ticks(math.floor(min(yt)), math.ceil(max(yt)), 7)
-        plt.yticks(tticks, [str(t) for t in tticks], yside="right")
 
     plt.xlabel("time (min)")
     if title:
@@ -239,8 +242,8 @@ def _ascii_profile(times: list[float], depths: list[float],
         width = max(30, min(72, term_width() - 12))
     dmax = max(depths) or 1.0
     grid = _Grid(width, height)
-    _plot_series(grid, _resample(times, depths, width), 0.0, dmax, "•",
-                 top_is_min=True)
+    # draw temperature first so the depth line is laid on top of it (later writes
+    # win a cell), keeping depth readable where the two lines cross
     have_temp = show_temp and bool(temps) and any(t is not None for t in temps)
     if have_temp:
         tv = [t for t in temps if t is not None]  # type: ignore[union-attr]
@@ -249,6 +252,8 @@ def _ascii_profile(times: list[float], depths: list[float],
             tlo, thi = tlo - 1, thi + 1
         _plot_series(grid, _resample(times, temps, width), tlo, thi, "·",
                      top_is_min=False)
+    _plot_series(grid, _resample(times, depths, width), 0.0, dmax, "•",
+                 top_is_min=True)
     lab = [f"{(i / (height - 1)) * dmax:5.1f}" for i in range(height)]
     wlab = max(len(s) for s in lab)
     out = ["", "Depth profile  (• depth m" +
