@@ -32,6 +32,12 @@ class DiveFilter:
     region: str | None = None                # substring match on Place.Region
     buddy: str | None = None                 # substring match on Buddy
     comment: str | None = None               # substring match on Comments (case-insensitive)
+    # negative substring filters: drop a dive if it matches ANY listed term
+    exclude_place: list[str] = field(default_factory=list)
+    exclude_country: list[str] = field(default_factory=list)
+    exclude_region: list[str] = field(default_factory=list)
+    exclude_buddy: list[str] = field(default_factory=list)
+    exclude_comment: list[str] = field(default_factory=list)
     min_depth: float | None = None           # metres
     max_depth: float | None = None           # metres
     min_divetime: float | None = None        # minutes
@@ -257,6 +263,31 @@ class DiveMate:
         if f.comment:
             clauses.append("L.Comments LIKE ?")
             params.append(f"%{f.comment}%")
+
+        # --- negative substring filters (exclude on match of any term) --------
+        # NULL-safe: a NULL column counts as "does not match", so the dive stays.
+        for col, terms in (("Place", f.exclude_place),
+                           ("Country", f.exclude_country),
+                           ("Comments", f.exclude_comment)):
+            for term in terms:
+                clauses.append(f"(L.{col} IS NULL OR L.{col} NOT LIKE ?)")
+                params.append(f"%{term}%")
+        for term in f.exclude_region:
+            needs_place = True
+            clauses.append("(P.Region IS NULL OR P.Region NOT LIKE ?)")
+            params.append(f"%{term}%")
+        for term in f.exclude_buddy:
+            # mirror the positive buddy predicate, then negate it; COALESCE keeps
+            # NULL Buddy/BuddyIDs from turning the NOT(...) into NULL.
+            ids = [bid for bid, name in self.buddy_names().items()
+                   if term.lower() in name.lower()]
+            subs = ["COALESCE(L.Buddy, '') LIKE ?"]
+            params.append(f"%{term}%")
+            for bid in ids:
+                subs.append("(',' || replace(COALESCE(L.BuddyIDs, ''),' ','') || ',') LIKE ?")
+                params.append(f"%,{bid},%")
+            clauses.append("NOT (" + " OR ".join(subs) + ")")
+
         if f.min_depth is not None:
             clauses.append("L.Depth >= ?")
             params.append(f.min_depth)

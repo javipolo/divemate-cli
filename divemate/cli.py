@@ -30,6 +30,17 @@ def _add_filter_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--region", help="region substring (dive-site region)")
     p.add_argument("--buddy", help="buddy substring")
     p.add_argument("--comment", help="text to find in the comments")
+    # negative filters (repeatable): exclude dives matching any given substring
+    p.add_argument("--exclude-place", action="append", metavar="SUBSTR",
+                   help="exclude dives whose place matches (repeatable)")
+    p.add_argument("--exclude-country", action="append", metavar="SUBSTR",
+                   help="exclude dives whose country matches (repeatable)")
+    p.add_argument("--exclude-region", action="append", metavar="SUBSTR",
+                   help="exclude dives whose region matches (repeatable)")
+    p.add_argument("--exclude-buddy", action="append", metavar="SUBSTR",
+                   help="exclude dives with a matching buddy (repeatable)")
+    p.add_argument("--exclude-comment", action="append", metavar="SUBSTR",
+                   help="exclude dives whose comments match (repeatable)")
     p.add_argument("--tag", help="find a #tag in the comments (give it without the #)")
     p.add_argument("--min-depth", type=float, help="minimum max-depth (m)")
     p.add_argument("--max-depth", type=float, help="maximum max-depth (m)")
@@ -102,6 +113,11 @@ def _filter_from_args(a: argparse.Namespace) -> DiveFilter:
         tanksize=a.tanksize, exclude_tanksize=a.exclude_tanksize,
         place=a.place, country=a.country, region=a.region, buddy=a.buddy,
         comment=comment,
+        exclude_place=a.exclude_place or [],
+        exclude_country=a.exclude_country or [],
+        exclude_region=a.exclude_region or [],
+        exclude_buddy=a.exclude_buddy or [],
+        exclude_comment=a.exclude_comment or [],
         min_depth=a.min_depth, max_depth=a.max_depth,
         min_divetime=a.min_divetime, water=a.water,
         min_sac=a.min_sac, max_sac=a.max_sac,
@@ -166,6 +182,13 @@ def _describe_filters(a: argparse.Namespace) -> str:
         p.append(f"#{a.tag.lstrip('#')}")
     if a.comment:
         p.append(f"comment '{a.comment}'")
+    for label, terms in (("place", getattr(a, "exclude_place", None)),
+                         ("country", getattr(a, "exclude_country", None)),
+                         ("region", getattr(a, "exclude_region", None)),
+                         ("buddy", getattr(a, "exclude_buddy", None)),
+                         ("comment", getattr(a, "exclude_comment", None))):
+        if terms:
+            p.append(f"not {label} " + ", ".join(f"'{t}'" for t in terms))
     if a.min_depth is not None:
         p.append(f"depth ≥{a.min_depth:g}m")
     if a.max_depth is not None:
