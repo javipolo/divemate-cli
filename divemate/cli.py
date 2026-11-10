@@ -149,53 +149,83 @@ def _looks_like_range(tok: str) -> bool:
     return bool(_RANGE_RE.match(tok))
 
 
-# one `field op value` chunk, used to re-quote a value the shell merged with its
-# field into a single token (e.g. `period='last year'` -> `period=last year`).
+# one `field op value` chunk, used to re-quote a value the shell split or merged
+# (e.g. `period='last year'` -> one token, or `period=last year` -> two tokens).
 _CMP_RE = re.compile(
     r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(!==|==|>=|<=|!=|!~|=|~|>|<)\s*(.+?)\s*$")
+_KEYWORDS = {"and", "or", "not"}
 
 
-def _repair_token(s: str) -> str:
-    """If `s` doesn't parse but looks like a single `field op value` whose value
-    contains shell-merged spaces, quote the value and retry. Leaves anything that
-    already parses (a real expression) untouched, so valid queries are never
-    rewritten."""
+def _parses(s: str) -> bool:
     try:
         query.parse(s)
-        return s
+        return True
     except ValueError:
-        pass
-    m = _CMP_RE.match(s)
-    if not m:
-        return s
-    field, op, val = m.group(1), m.group(2), m.group(3)
-    if len(val) >= 2 and val[0] in "\"'" and val[-1] == val[0]:
-        return s  # already quoted
-    for q in (f'"{val}"', f"'{val}'"):
-        if q[0] not in val:
-            cand = f"{field}{op}{q}"
-            try:
-                query.parse(cand)
-                return cand
-            except ValueError:
-                pass
-    return s
+        return False
+
+
+def _absorbable(tok: str) -> bool:
+    """A bare word that can be part of a preceding value: not a keyword, not a new
+    comparison, no operators/parens/quotes of its own."""
+    if tok.lower() in _KEYWORDS or _CMP_RE.match(tok):
+        return False
+    return not any(c in tok for c in "()=~<>!\"'")
+
+
+def _regroup(toks: list[str]) -> str:
+    """Rebuild a query from shell word-tokens, gathering a comparison's value from
+    the following bare words and quoting it — so `period=last year` becomes
+    `period="last year"`. Only used as a fallback when the plain join fails."""
+    out: list[str] = []
+    i, n = 0, len(toks)
+    while i < n:
+        m = _CMP_RE.match(toks[i])
+        if not m:
+            out.append(toks[i])
+            i += 1
+            continue
+        field, op, val = m.group(1), m.group(2), m.group(3)
+        if len(val) >= 2 and val[0] in "\"'" and val[-1] == val[0]:
+            out.append(toks[i])        # value already quoted
+            i += 1
+            continue
+        parts, j = [val], i + 1
+        while j < n and _absorbable(toks[j]):
+            parts.append(toks[j])
+            j += 1
+        value = " ".join(parts)
+        if '"' not in value:
+            out.append(f'{field}{op}"{value}"')
+        elif "'" not in value:
+            out.append(f"{field}{op}'{value}'")
+        else:
+            out.append(f"{field}{op}{value}")
+        i = j
+    return " ".join(out)
 
 
 def _query_text(a: argparse.Namespace) -> str | None:
-    """The effective query string: the -q/--query flag and any bare trailing
-    QUERY words, combined with AND when both are present. Each piece is repaired
-    so shell-quoted multi-word values (e.g. `period='last year'`) still work."""
-    parts = []
+    """The effective query string from the -q/--query flag and any bare trailing
+    QUERY words. When both are already valid they combine with AND (parens keep
+    precedence); otherwise the whole token stream is regrouped so shell-split or
+    shell-merged multi-word values (`period=last year`, `region='costa brava'`)
+    still work."""
     flag = getattr(a, "query", None)
-    if flag:
-        parts.append(_repair_token(flag))
-    words = getattr(a, "query_words", None)
-    if words:
-        parts.append(" ".join(_repair_token(w) for w in words))
-    if not parts:
+    words = list(getattr(a, "query_words", None) or [])
+    if not flag and not words:
         return None
-    return parts[0] if len(parts) == 1 else " and ".join(f"({p})" for p in parts)
+    words_str = " ".join(words)
+    # fast path: each piece already valid -> AND-combine, preserving precedence
+    if (flag is None or _parses(flag)) and (not words or _parses(words_str)):
+        pieces = ([flag] if flag else []) + ([words_str] if words else [])
+        return pieces[0] if len(pieces) == 1 else " and ".join(f"({p})" for p in pieces)
+    # repair path: treat everything as one token stream
+    toks = ([flag] if flag else []) + words
+    joined = " ".join(toks)
+    if _parses(joined):
+        return joined
+    regrouped = _regroup(toks)
+    return regrouped if _parses(regrouped) else joined
 
 
 def _predicate_from_args(a: argparse.Namespace):

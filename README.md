@@ -212,11 +212,12 @@ dmcli graph count --query 'tag=sidemount and region=mallorca'
 If you pass both `--query` and trailing words, they are combined with AND. (On
 `list`, a leading `N-M` dive-number range is taken first; the rest is the query.)
 
-Shell-quoting a multi-word value works too — `period='last year'` or
-`region='costa brava'` reach the parser as one token and are quoted
-automatically, so you don't also need the inner query quotes (`period="last
-year"`). Note the shell still eats bare `>`, `<` and `(` `)`, so quote those
-(`'depth>30'`, `'(a or b)'`).
+Multi-word values need no quotes at all: `period=last year` or `region=costa
+brava` work whether or not the shell groups them (`period='last year'` is also
+fine). The following bare words are folded into the value — but only when that is
+needed to parse, so an already-valid query like `region~mallorca night` (region
+AND the `night` flag) is left alone. The shell still eats bare `>`, `<` and `(`
+`)`, so quote those (`'depth>30'`, `'(a or b)'`).
 
 Grammar: boolean `and` / `or` / `not` (case-insensitive) with parentheses;
 leaves are `field op value` comparisons (or a bare boolean field like `night`).
