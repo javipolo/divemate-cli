@@ -149,16 +149,50 @@ def _looks_like_range(tok: str) -> bool:
     return bool(_RANGE_RE.match(tok))
 
 
+# one `field op value` chunk, used to re-quote a value the shell merged with its
+# field into a single token (e.g. `period='last year'` -> `period=last year`).
+_CMP_RE = re.compile(
+    r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(!==|==|>=|<=|!=|!~|=|~|>|<)\s*(.+?)\s*$")
+
+
+def _repair_token(s: str) -> str:
+    """If `s` doesn't parse but looks like a single `field op value` whose value
+    contains shell-merged spaces, quote the value and retry. Leaves anything that
+    already parses (a real expression) untouched, so valid queries are never
+    rewritten."""
+    try:
+        query.parse(s)
+        return s
+    except ValueError:
+        pass
+    m = _CMP_RE.match(s)
+    if not m:
+        return s
+    field, op, val = m.group(1), m.group(2), m.group(3)
+    if len(val) >= 2 and val[0] in "\"'" and val[-1] == val[0]:
+        return s  # already quoted
+    for q in (f'"{val}"', f"'{val}'"):
+        if q[0] not in val:
+            cand = f"{field}{op}{q}"
+            try:
+                query.parse(cand)
+                return cand
+            except ValueError:
+                pass
+    return s
+
+
 def _query_text(a: argparse.Namespace) -> str | None:
     """The effective query string: the -q/--query flag and any bare trailing
-    QUERY words, combined with AND when both are present."""
+    QUERY words, combined with AND when both are present. Each piece is repaired
+    so shell-quoted multi-word values (e.g. `period='last year'`) still work."""
     parts = []
     flag = getattr(a, "query", None)
     if flag:
-        parts.append(flag)
+        parts.append(_repair_token(flag))
     words = getattr(a, "query_words", None)
     if words:
-        parts.append(" ".join(words))
+        parts.append(" ".join(_repair_token(w) for w in words))
     if not parts:
         return None
     return parts[0] if len(parts) == 1 else " and ".join(f"({p})" for p in parts)
