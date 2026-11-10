@@ -200,6 +200,18 @@ dmcli list  --country spain --query 'sac<18 or tank=15'
 dmcli group region --query 'night and divetime>50'
 ```
 
+You can also drop the `--query` and the quotes and just append the expression as
+trailing words — they are joined into the query. These are equivalent:
+
+```sh
+dmcli graph count tag=sidemount region=mallorca
+dmcli graph count 'tag=sidemount region=mallorca'
+dmcli graph count --query 'tag=sidemount and region=mallorca'
+```
+
+If you pass both `--query` and trailing words, they are combined with AND. (On
+`list`, a leading `N-M` dive-number range is taken first; the rest is the query.)
+
 Grammar: boolean `and` / `or` / `not` (case-insensitive) with parentheses;
 leaves are `field op value` comparisons (or a bare boolean field like `night`).
 `and` is also implicit between adjacent terms — `region~mallorca period=2025` is

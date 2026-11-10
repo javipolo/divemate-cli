@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 
 from . import query
@@ -21,6 +22,12 @@ def _add_filter_args(p: argparse.ArgumentParser) -> None:
                         "!= !~ !==; numbers = != < <= > >=; booleans night/weekend; "
                         "period=\"last year\" as a date-range shortcut. "
                         "Combines with the other filters using AND.")
+    # bare trailing words are joined into the query, so you can skip the quotes:
+    # `graph count tag=sidemount region=mallorca`. On `list`, a leading N-M dive
+    # range is taken first. Combined with -q/--query (if both given) using AND.
+    p.add_argument("query_words", nargs="*", metavar="QUERY",
+                   help="query expression as bare words (no quotes needed); "
+                        "joins with -q/--query if both are given")
     p.add_argument("--year", type=int, help="dive year, e.g. 2026")
     p.add_argument("--period", metavar="PERIOD",
                    help="quick range: 'this month', 'this year', 'year 2024', "
@@ -134,10 +141,33 @@ def _filter_from_args(a: argparse.Namespace) -> DiveFilter:
     )
 
 
+_RANGE_RE = re.compile(r"^(\d+-?\d*|-\d+)$")
+
+
+def _looks_like_range(tok: str) -> bool:
+    """A dive-number range token: N, N-M, N-, or -M (used by `list`)."""
+    return bool(_RANGE_RE.match(tok))
+
+
+def _query_text(a: argparse.Namespace) -> str | None:
+    """The effective query string: the -q/--query flag and any bare trailing
+    QUERY words, combined with AND when both are present."""
+    parts = []
+    flag = getattr(a, "query", None)
+    if flag:
+        parts.append(flag)
+    words = getattr(a, "query_words", None)
+    if words:
+        parts.append(" ".join(words))
+    if not parts:
+        return None
+    return parts[0] if len(parts) == 1 else " and ".join(f"({p})" for p in parts)
+
+
 def _predicate_from_args(a: argparse.Namespace):
-    """Compile the --query expression into a `(dive_record) -> bool` callable,
-    or None when no --query was given."""
-    text = getattr(a, "query", None)
+    """Compile the effective query into a `(dive_record) -> bool` callable,
+    or None when no query was given."""
+    text = _query_text(a)
     return query.predicate(text) if text else None
 
 
@@ -225,8 +255,9 @@ def _describe_filters(a: argparse.Namespace) -> str:
         p.append(f"diver {a.diver}")
     if a.include_deleted:
         p.append("incl. deleted")
-    if getattr(a, "query", None):
-        p.append(f"query '{a.query}'")
+    qtext = _query_text(a)
+    if qtext:
+        p.append(f"query '{qtext}'")
     return ", ".join(p) if p else "all dives"
 
 
@@ -317,6 +348,10 @@ SORT_FIELDS = {
 
 
 def cmd_list(db: DiveMate, a: argparse.Namespace) -> None:
+    # a leading N-M token is the dive-number range; the rest is the query
+    words = list(a.query_words or [])
+    a.range = words.pop(0) if words and _looks_like_range(words[0]) else None
+    a.query_words = words
     f = _filter_from_args(a)
     key = (a.sort or "date").strip().lower()
     if key not in SORT_FIELDS:
@@ -788,9 +823,6 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pl = sub.add_parser("list", help="list dives matching filters")
-    pl.add_argument("range", nargs="?", metavar="N-M",
-                    help="dive number range, e.g. 100-130 (or a single number, "
-                         "or open-ended 100- / -130)")
     _add_filter_args(pl)
     pl.add_argument("--columns", help="comma-separated column list")
     pl.add_argument("--sort", metavar="FIELD",
