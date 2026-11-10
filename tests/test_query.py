@@ -89,6 +89,15 @@ def test_double_eq_is_exact():
     assert ev("place==toro") is False              # full value is "El Toro. Boya 3"
 
 
+def test_accent_insensitive():
+    rec = {"buddies": ["Tomás Pines"], "Place": "Palamós"}
+    assert q.predicate("buddy~tomas")(rec) is True
+    assert q.predicate("buddy~tomàs")(rec) is True
+    assert q.predicate("place~palamos")(rec) is True
+    assert q.predicate('place=="palamos"')(rec) is True   # exact, accent-folded
+    assert q.predicate("buddy~shark")(rec) is False
+
+
 def test_text_negations():
     assert ev("region!=mall") is False             # !=/!~ = does not contain
     assert ev("region!~mall") is False

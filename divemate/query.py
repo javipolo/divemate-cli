@@ -31,6 +31,7 @@ contain spaces/punctuation (`place="el toro"`).
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field as _dc_field
 from typing import Any, Callable
 
@@ -342,9 +343,17 @@ def _as_list(spec: FieldSpec, rec: dict) -> list[Any]:
     return [] if v is None else [v]
 
 
+def _fold(s: Any) -> str:
+    """Case- and accent-insensitive key: NFD-decompose, drop combining marks,
+    casefold. So 'tomas' matches 'Tomás' / 'Tomàs'."""
+    s = unicodedata.normalize("NFD", str(s))
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return s.casefold()
+
+
 def _cmp_text(op: str, values: list[Any], target: str) -> bool:
-    t = target.casefold()
-    svals = [str(v).casefold() for v in values if v not in (None, "")]
+    t = _fold(target)
+    svals = [_fold(v) for v in values if v not in (None, "")]
     if op in ("=", "~"):           # contains
         return any(t in v for v in svals)
     if op in ("!=", "!~"):         # does not contain

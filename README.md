@@ -217,6 +217,11 @@ For text, `=` and `~` are synonyms (substring match); use `==` for an exact,
 whole-value match — e.g. `place=tossa` matches any Tossa site, `place=="Tossa de
 Mar"` only that exact place. On numbers/dates `=` and `==` both mean equal.
 
+Text matching is accent-insensitive as well as case-insensitive, so `buddy~tomas`
+matches `Tomás` and `Tomàs`, and `place~palamos` matches `Palamós`. (This folding
+applies to `--query`; the plain `--place`/`--buddy`/… flags still match accents
+literally.)
+
 `tag=cave` matches a `#cave` tag in the comments (give it without the `#`), the
 same tags `dmcli tags` lists.
 
