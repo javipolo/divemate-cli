@@ -29,6 +29,7 @@ class DiveFilter:
     exclude_tanksize: float | None = None    # litres, exclude dives having this tank size
     place: str | None = None                 # substring match on Place (case-insensitive)
     country: str | None = None               # substring match on Country
+    region: str | None = None                # substring match on Place.Region
     buddy: str | None = None                 # substring match on Buddy
     comment: str | None = None               # substring match on Comments (case-insensitive)
     min_depth: float | None = None           # metres
@@ -178,11 +179,23 @@ class DiveMate:
 
     # ---- internal: build WHERE from a DiveFilter -------------------------
 
-    def _where(self, f: DiveFilter) -> tuple[str, list[Any], bool]:
-        """Return (where_sql, params, needs_tank_join)."""
+    @staticmethod
+    def _joins(needs_tank: bool, needs_place: bool) -> str:
+        """Compose the FROM-clause joins a query needs. Place is LEFT-joined so
+        dives with no linked site (PlaceID 0/NULL) are not dropped."""
+        join = ""
+        if needs_tank:
+            join += " JOIN Tank T ON T.LogID = L.ID"
+        if needs_place:
+            join += " LEFT JOIN Place P ON P.ID = L.PlaceID"
+        return join
+
+    def _where(self, f: DiveFilter) -> tuple[str, list[Any], bool, bool]:
+        """Return (where_sql, params, needs_tank_join, needs_place_join)."""
         clauses: list[str] = []
         params: list[Any] = []
         needs_tank = False
+        needs_place = False
 
         # DiveMate soft-deletes dives by setting Status=2 (they keep the row but
         # blank out Place/tank). Exclude them by default.
@@ -226,6 +239,10 @@ class DiveMate:
         if f.country:
             clauses.append("L.Country LIKE ?")
             params.append(f"%{f.country}%")
+        if f.region:
+            needs_place = True
+            clauses.append("P.Region LIKE ?")
+            params.append(f"%{f.region}%")
         if f.buddy:
             # buddies are referenced by ID in Logbook.BuddyIDs -> resolve names first
             ids = [bid for bid, name in self.buddy_names().items()
@@ -282,7 +299,7 @@ class DiveMate:
             params.extend([NIGHT_START, NIGHT_END])
 
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        return where, params, needs_tank
+        return where, params, needs_tank, needs_place
 
     # ---- queries ---------------------------------------------------------
 
@@ -290,14 +307,17 @@ class DiveMate:
               desc: bool = False) -> list[dict[str, Any]]:
         """Return dives matching the filter as a list of dicts."""
         f = f or DiveFilter()
-        where, params, needs_tank = self._where(f)
-        join = " JOIN Tank T ON T.LogID = L.ID" if needs_tank else ""
-        cols = ", ".join(f"L.{c}" for c in DIVE_COLUMNS)
+        where, params, needs_tank, _ = self._where(f)
+        # always LEFT JOIN Place so Region is available as a column / sort key
+        join = self._joins(needs_tank, needs_place=True)
+        cols = ", ".join(f"L.{c}" for c in DIVE_COLUMNS) + ", P.Region AS Region"
         # DISTINCT so a dive with several matching tanks is not duplicated
         direction = "DESC" if desc else "ASC"
+        # Region is an alias (Place column), not L.*; everything else is on L
+        order_expr = "Region" if order == "Region" else f"L.{order}"
         sql = (
             f"SELECT DISTINCT {cols} FROM Logbook L{join}{where} "
-            f"ORDER BY L.{order} {direction}"
+            f"ORDER BY {order_expr} {direction}"
         )
         rows = [dict(r) for r in self.conn.execute(sql, params)]
         sac = self.sac()
@@ -324,8 +344,9 @@ class DiveMate:
                 clauses.append("L.DiverID = ?")
                 params.append(d)
         where = " WHERE " + " AND ".join(clauses)
-        rows = [dict(r) for r in
-                self.conn.execute(f"SELECT * FROM Logbook L{where}", params)]
+        rows = [dict(r) for r in self.conn.execute(
+            "SELECT L.*, P.Region AS Region FROM Logbook L "
+            f"LEFT JOIN Place P ON P.ID = L.PlaceID{where}", params)]
         for r in rows:
             for c in SENTINEL_COLUMNS:
                 if r.get(c) == EMPTY_SENTINEL:
@@ -405,8 +426,8 @@ class DiveMate:
 
     def count(self, f: DiveFilter | None = None) -> int:
         f = f or DiveFilter()
-        where, params, needs_tank = self._where(f)
-        join = " JOIN Tank T ON T.LogID = L.ID" if needs_tank else ""
+        where, params, needs_tank, needs_place = self._where(f)
+        join = self._joins(needs_tank, needs_place)
         sql = f"SELECT COUNT(DISTINCT L.ID) FROM Logbook L{join}{where}"
         return self.conn.execute(sql, params).fetchone()[0]
 
@@ -443,8 +464,9 @@ class DiveMate:
             return self.group_buddies(f, limit=limit, order=order)
         expr = self._group_expr(column)
         f = f or DiveFilter()
-        where, params, needs_tank = self._where(f)
-        join = " JOIN Tank T ON T.LogID = L.ID" if needs_tank else ""
+        where, params, needs_tank, needs_place = self._where(f)
+        # grouping by region (P.Region) also needs the Place join
+        join = self._joins(needs_tank, needs_place or "P." in expr)
         order_by = "dives DESC" if order == "count" else "value ASC"
         sql = (
             f"SELECT {expr} AS value, COUNT(DISTINCT L.ID) AS dives "
@@ -460,8 +482,8 @@ class DiveMate:
         """Count dives per buddy, expanding Logbook.BuddyIDs. A dive with two
         buddies counts once for each, so totals can exceed the dive count."""
         f = f or DiveFilter()
-        where, params, needs_tank = self._where(f)
-        join = " JOIN Tank T ON T.LogID = L.ID" if needs_tank else ""
+        where, params, needs_tank, needs_place = self._where(f)
+        join = self._joins(needs_tank, needs_place)
         sql = f"SELECT DISTINCT L.ID, L.BuddyIDs FROM Logbook L{join}{where}"
         names = self.buddy_names()
         counts: dict[int, int] = {}
@@ -482,6 +504,9 @@ class DiveMate:
         key = column.strip().lower()
         if key in ("year", "año", "ano"):
             return "substr(L.Divedate,1,4)"
+        if key in ("region", "región", "regions"):
+            # treat an empty region the same as an unlinked site (one blank group)
+            return "NULLIF(P.Region, '')"
         if key in ("night", "day", "nightday", "daynight"):
             return (f"CASE WHEN {_ENTRY_HOUR} IS NULL THEN 'unknown' "
                     f"WHEN {_ENTRY_HOUR} >= {NIGHT_START} OR {_ENTRY_HOUR} < {NIGHT_END} "
@@ -494,13 +519,13 @@ class DiveMate:
         if key in _GROUPABLE_LC:
             return f"L.{_GROUPABLE_LC[key]}"
         allowed = ", ".join(sorted(_GROUPABLE) +
-                            ["year", "month", "weekend", "night", "buddy"])
+                            ["year", "month", "weekend", "night", "buddy", "region"])
         raise ValueError(f"cannot group by {column!r}. Allowed: {allowed}")
 
     def dives_per_year(self, f: DiveFilter | None = None) -> list[dict[str, Any]]:
         f = f or DiveFilter()
-        where, params, needs_tank = self._where(f)
-        join = " JOIN Tank T ON T.LogID = L.ID" if needs_tank else ""
+        where, params, needs_tank, needs_place = self._where(f)
+        join = self._joins(needs_tank, needs_place)
         sql = (
             f"SELECT substr(L.Divedate,1,4) AS year, COUNT(DISTINCT L.ID) AS n "
             f"FROM Logbook L{join}{where} "

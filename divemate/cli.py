@@ -27,6 +27,7 @@ def _add_filter_args(p: argparse.ArgumentParser) -> None:
                         "--exclude-tank 11.1 = sidemount dives missing an 11.1)")
     p.add_argument("--place", help="place substring")
     p.add_argument("--country", help="country substring")
+    p.add_argument("--region", help="region substring (dive-site region)")
     p.add_argument("--buddy", help="buddy substring")
     p.add_argument("--comment", help="text to find in the comments")
     p.add_argument("--tag", help="find a #tag in the comments (give it without the #)")
@@ -99,7 +100,7 @@ def _filter_from_args(a: argparse.Namespace) -> DiveFilter:
         year=a.year, date_from=date_from, date_to=date_to,
         number_from=number_from, number_to=number_to,
         tanksize=a.tanksize, exclude_tanksize=a.exclude_tanksize,
-        place=a.place, country=a.country, buddy=a.buddy,
+        place=a.place, country=a.country, region=a.region, buddy=a.buddy,
         comment=comment,
         min_depth=a.min_depth, max_depth=a.max_depth,
         min_divetime=a.min_divetime, water=a.water,
@@ -157,6 +158,8 @@ def _describe_filters(a: argparse.Namespace) -> str:
         p.append(f"place '{a.place}'")
     if a.country:
         p.append(f"country '{a.country}'")
+    if getattr(a, "region", None):
+        p.append(f"region '{a.region}'")
     if a.buddy:
         p.append(f"buddy '{a.buddy}'")
     if getattr(a, "tag", None):
@@ -270,7 +273,7 @@ SORT_FIELDS = {
     "depth": "Depth", "maxdepth": "Depth", "avgdepth": "DepthAvg",
     "depthavg": "DepthAvg", "watertemp": "Watertemp", "temp": "Watertemp",
     "airtemp": "Airtemp", "o2": "O2", "tanksize": "Tanksize",
-    "place": "Place", "country": "Country", "sac": "SAC",
+    "place": "Place", "country": "Country", "region": "Region", "sac": "SAC",
 }
 
 
@@ -310,6 +313,7 @@ _INFO_SECTIONS = [
     [("Date", "Divedate", ""),
      ("Entry time", "Entrytime", "")],
     [("Place", "Place", ""),
+     ("Region", "Region", ""),
      ("Country", "Country", ""),
      ("Buddies", "__buddies__", "")],
     [("Dive time", "Divetime", "min"),
@@ -682,7 +686,7 @@ def _bash_completion_script() -> str:
     # value suggestions for positionals that take a known set of words
     from .db import _GROUPABLE
     positional = {
-        "group": sorted(_GROUPABLE) + ["year", "month", "weekend", "night", "buddy"],
+        "group": sorted(_GROUPABLE) + ["year", "month", "weekend", "night", "buddy", "region"],
         "graph": sorted(GRAPH_FIELDS) + ["count"],
         "info": ["last", "first"],
         "completion": ["bash"],
@@ -749,7 +753,7 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--columns", help="comma-separated column list")
     pl.add_argument("--sort", metavar="FIELD",
                     help="sort by: date (default), number, depth, avgdepth, "
-                         "divetime, watertemp, tanksize, sac, place, country")
+                         "divetime, watertemp, tanksize, sac, place, country, region")
     pl.add_argument("--asc", action="store_true",
                     help="ascending order (default: descending, highest first)")
     pl.add_argument("--limit", type=int, help="show only the first N dives")
@@ -786,9 +790,9 @@ def build_parser() -> argparse.ArgumentParser:
     ps.set_defaults(func=cmd_stats)
 
     pg = sub.add_parser("group", help="count dives grouped by a field (+ filters)")
-    pg.add_argument("by", help="field to group by: Place, Country, Buddy, Computer, "
-                    "Divesuit, Water, Tanksize, Boat, Rating, ... or year / month / "
-                    "weekend / night")
+    pg.add_argument("by", help="field to group by: Place, Country, Region, Buddy, "
+                    "Computer, Divesuit, Water, Tanksize, Boat, Rating, ... or year / "
+                    "month / weekend / night")
     pg.add_argument("--limit", type=int, help="show only the top N groups")
     pg.add_argument("--sort", choices=("count", "value"), default="count",
                     help="order by dive count (default) or by the group value")
