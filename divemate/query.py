@@ -73,6 +73,17 @@ class Flag:
 Node = Any  # And | Or | Not | Compare | Flag
 
 
+@dataclass
+class Query:
+    """A parsed query: a filter expression plus optional presentation directives
+    (sort / limit). `expr` is None for a directives-only query like
+    `sort depth limit 5`."""
+    expr: "Node | None" = None
+    sort: str | None = None
+    desc: bool = True            # default newest/highest first, like list used to
+    limit: int | None = None
+
+
 # --- field registry (single source of truth) -------------------------------
 
 TEXT, NUMBER, DATE, BOOL = "text", "number", "date", "bool"
@@ -205,7 +216,11 @@ def _resolve(name: str) -> FieldSpec:
 # --- grammar + transformer -------------------------------------------------
 
 _GRAMMAR = r"""
-?start: or_expr
+start: or_expr directive*       -> q_full
+     | directive+               -> q_dirs
+
+directive: SORT FIELD SORTDIR?  -> d_sort
+         | LIMIT INT            -> d_limit
 
 ?or_expr: or_expr OR and_expr   -> or_op
         | and_expr
@@ -227,7 +242,11 @@ _GRAMMAR = r"""
 OR: "or"i
 AND: "and"i
 NOT: "not"i
+SORT.3: "sort"i
+LIMIT.3: "limit"i
+SORTDIR.3: "asc"i | "desc"i
 OP.2: "!==" | "==" | ">=" | "<=" | "!=" | "!~" | "=" | "~" | ">" | "<"
+INT: /[0-9]+/
 FIELD: /[a-zA-Z_][a-zA-Z0-9_]*/
 STRING: /"[^"]*"/ | /'[^']*'/
 RAW: /[^\s()=~<>!'"]+/
@@ -266,6 +285,32 @@ class _ToAst(Transformer):
 
     def raw(self, tok):
         return str(tok)
+
+    # directives and the top-level Query
+    def d_sort(self, _kw, field, direction=None):
+        desc = True if direction is None else str(direction).lower() == "desc"
+        return ("sort", str(field), desc)
+
+    def d_limit(self, _kw, n):
+        return ("limit", int(n))
+
+    def q_full(self, expr, *dirs):
+        return _build_query(expr, dirs)
+
+    def q_dirs(self, *dirs):
+        return _build_query(None, dirs)
+
+
+def _build_query(expr, dirs) -> "Query":
+    q = Query(expr=expr)
+    for d in dirs:
+        if d[0] == "sort":
+            q.sort, q.desc = d[1], d[2]
+        else:  # limit
+            if d[1] < 1:
+                raise ValueError(f"limit must be >= 1, got {d[1]}")
+            q.limit = d[1]
+    return q
 
 
 _PARSER = Lark(_GRAMMAR, parser="lalr", transformer=_ToAst())
@@ -319,18 +364,22 @@ def _validate(node: Node) -> None:
                 f"(use = != < <= > >=)")
 
 
-def parse(text: str) -> Node:
-    """Parse a query string into an AST, raising ValueError on any problem."""
+def parse(text: str) -> Query:
+    """Parse a query string into a Query (expr + sort/limit), raising ValueError
+    on any problem."""
     text = (text or "").strip()
     if not text:
         raise ValueError("empty query")
     try:
-        tree = _PARSER.parse(text)
+        q = _PARSER.parse(text)
     except LarkError as e:
         raise ValueError(f"invalid query: {e}") from None
-    tree = _expand(tree)
-    _validate(tree)
-    return tree
+    if q.expr is not None:
+        q.expr = _expand(q.expr)
+        _validate(q.expr)
+    if q.sort is not None:
+        _resolve(q.sort)   # validate the sort field name
+    return q
 
 
 # --- Python evaluation backend --------------------------------------------
@@ -446,6 +495,22 @@ def match(node: Node, rec: dict) -> bool:
 
 
 def predicate(text: str) -> Callable[[dict], bool]:
-    """Parse `text` and return a callable `(dive_record) -> bool`."""
-    ast = parse(text)
-    return lambda rec: match(ast, rec)
+    """Parse `text` and return a callable `(dive_record) -> bool`. A query with
+    no filter expression (only sort/limit directives) matches every dive."""
+    node = parse(text).expr
+    if node is None:
+        return lambda rec: True
+    return lambda rec: match(node, rec)
+
+
+def sort_key(field: str) -> Callable[[dict], Any]:
+    """A key function for sorting dive records by a query field. Multi-valued
+    fields sort by their smallest value; missing values sort as None."""
+    spec = _resolve(field)
+    def key(rec: dict) -> Any:
+        v = spec.get(rec)
+        if spec.multi:
+            vals = [x for x in (v or []) if x is not None]
+            return min(vals) if vals else None
+        return v
+    return key

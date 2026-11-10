@@ -6,6 +6,11 @@ from divemate import query as q
 from divemate.query import And, Or, Not, Compare, Flag
 
 
+def P(expr):
+    """Parsed query's filter-expression AST."""
+    return q.parse(expr).expr
+
+
 # a representative enriched dive record, as DiveMate.dives() produces it
 REC = {
     "Number": 500,
@@ -36,38 +41,38 @@ def ev(expr, rec=REC):
 # --- parsing / structure ---------------------------------------------------
 
 def test_precedence_or_binds_looser_than_and():
-    ast = q.parse("depth=1 and number=2 or o2=3")
+    ast = P("depth=1 and number=2 or o2=3")
     assert isinstance(ast, Or)
     assert isinstance(ast.items[0], And)
 
 
 def test_parentheses_override_precedence():
-    ast = q.parse("depth=1 and (number=2 or o2=3)")
+    ast = P("depth=1 and (number=2 or o2=3)")
     assert isinstance(ast, And)
     assert isinstance(ast.items[1], Or)
 
 
 def test_and_or_flatten():
-    assert len(q.parse("depth=1 and number=2 and o2=3").items) == 3
-    assert len(q.parse("depth=1 or number=2 or o2=3").items) == 3
+    assert len(P("depth=1 and number=2 and o2=3").items) == 3
+    assert len(P("depth=1 or number=2 or o2=3").items) == 3
 
 
 def test_not_and_flag():
-    assert q.parse("not night") == Not(Flag("night"))
+    assert P("not night") == Not(Flag("night"))
 
 
 def test_keywords_case_insensitive():
-    assert isinstance(q.parse("depth=1 AND number=2"), And)
-    assert isinstance(q.parse("depth=1 Or number=2"), Or)
+    assert isinstance(P("depth=1 AND number=2"), And)
+    assert isinstance(P("depth=1 Or number=2"), Or)
 
 
 def test_quoted_value_keeps_spaces():
-    assert q.parse('place="el toro"') == Compare("place", "=", "el toro")
-    assert q.parse("place='el toro'") == Compare("place", "=", "el toro")
+    assert P('place="el toro"') == Compare("place", "=", "el toro")
+    assert P("place='el toro'") == Compare("place", "=", "el toro")
 
 
 def test_bareword_accents():
-    assert q.parse("region=Palamós") == Compare("region", "=", "Palamós")
+    assert P("region=Palamós") == Compare("region", "=", "Palamós")
 
 
 # --- text operators --------------------------------------------------------
@@ -135,15 +140,15 @@ def test_period_expands_to_date_range():
     assert ev('period!=2024') is True
     assert ev('period="month 2025-08"') is True
     # expands to a date-range AND node, not a 'period' field
-    assert q.parse("period=2025") == And(
+    assert P("period=2025") == And(
         [Compare("date", ">=", "2025-01-01"), Compare("date", "<=", "2025-12-31")])
 
 
 def test_period_errors():
     with pytest.raises(ValueError, match="only supports = and !="):
-        q.parse("period~2024")
+        P("period~2024")
     with pytest.raises(ValueError, match="invalid period"):
-        q.parse("period=nonsense")
+        P("period=nonsense")
 
 
 # --- multi-valued + derived fields ----------------------------------------
@@ -178,8 +183,8 @@ def test_water_mapping():
 
 def test_implicit_and_by_juxtaposition():
     # adjacent terms with no operator mean AND
-    assert q.parse("region~mall period=2025") == q.parse("region~mall and period=2025")
-    assert q.parse("night weekend depth>30") == And(
+    assert P("region~mall period=2025") == P("region~mall and period=2025")
+    assert P("night weekend depth>30") == And(
         [Flag("night"), Flag("weekend"), Compare("depth", ">", "30")])
     assert ev("place~toro region=Mallorca") is True
     assert ev("place~toro region=Catalunya") is False
@@ -206,26 +211,70 @@ def test_missing_values_are_safe():
 
 def test_unknown_field():
     with pytest.raises(ValueError, match="unknown query field"):
-        q.parse("bogus=1")
+        P("bogus=1")
 
 
 def test_bad_operator_for_kind():
     with pytest.raises(ValueError, match="not valid for text field"):
-        q.parse("region<5")
+        P("region<5")
     with pytest.raises(ValueError, match="not valid for field"):
-        q.parse("depth~foo")
+        P("depth~foo")
 
 
 def test_syntax_error():
     with pytest.raises(ValueError, match="invalid query"):
-        q.parse("region=")
+        P("region=")
 
 
 def test_empty_query():
     with pytest.raises(ValueError, match="empty query"):
-        q.parse("   ")
+        P("   ")
 
 
 def test_number_type_error_at_eval():
     with pytest.raises(ValueError, match="expected a number"):
         ev("maxdepth>=abc")
+
+
+# --- sort / limit directives -----------------------------------------------
+
+def test_sort_directive_defaults_desc():
+    r = q.parse("region~mallorca sort depth")
+    assert r.sort == "depth" and r.desc is True
+    assert r.expr == Compare("region", "~", "mallorca")
+
+
+def test_sort_asc_desc():
+    assert q.parse("sort sac asc").desc is False
+    assert q.parse("sort sac desc").desc is True
+
+
+def test_limit_directive():
+    r = q.parse("depth>20 limit 5")
+    assert r.limit == 5 and r.expr == Compare("depth", ">", "20")
+
+
+def test_directives_only_no_filter():
+    r = q.parse("sort date desc limit 3")
+    assert r.expr is None and r.sort == "date" and r.limit == 3
+    # predicate of a directives-only query matches everything
+    assert q.predicate("sort date limit 3")({"Depth": 1}) is True
+
+
+def test_sort_and_limit_together():
+    r = q.parse("tag=sidemount sort depth asc limit 10")
+    assert r.sort == "depth" and r.desc is False and r.limit == 10
+
+
+def test_sort_bad_field():
+    with pytest.raises(ValueError, match="unknown query field"):
+        q.parse("sort bogus")
+
+
+def test_limit_must_be_positive():
+    with pytest.raises(ValueError, match="limit must be"):
+        q.parse("limit 0")
+
+
+def test_sort_limit_words_are_reserved_but_valid_as_values():
+    assert q.parse("place=sort").expr == Compare("place", "=", "sort")
