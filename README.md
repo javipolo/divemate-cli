@@ -525,3 +525,12 @@ already JSON-serialisable.
 - `Water`: `1` = salt, `0` = fresh, following DiveMate's own convention.
 - The database is opened read-only; running this tool cannot modify your logbook.
 ```
+
+## License
+
+Copyright (C) 2026 Javi Polo
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See [LICENSE](LICENSE) for the full text.

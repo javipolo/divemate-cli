@@ -3,6 +3,8 @@ name = "divemate-cli"
 version = "0.1.0"
 description = "Query and stats CLI for DiveMate .ddb (SQLite) logbooks"
 requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 dependencies = []
 
 [project.optional-dependencies]
@@ -15,7 +17,7 @@ charts = ["plotext>=5.2,<6"]
 dmcli = "divemate.cli:main"
 
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
