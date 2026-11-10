@@ -212,9 +212,14 @@ Operators by field type:
 | boolean (`night`, `weekend`) | bare flag, or `=true` / `=false` | — |
 
 `tag=cave` matches a `#cave` tag in the comments (give it without the `#`), the
-same tags `dmcli tags` lists. There is no `period` query field — it is a
-date-range shortcut; filter dates in a query with `date` / `year`, or pass the
-`--period` flag (it ANDs with `--query`).
+same tags `dmcli tags` lists.
+
+`period` is a date-range shortcut, expanded before evaluation into a `date`
+range — `period="last year"` becomes `date>=2025-01-01 and date<=2025-12-31`. It
+takes the same values as the `--period` flag (`period=2024`,
+`period="this month"`, `period="month 2024-07"`, `period="last 30 days"`, …) and
+supports only `=` / `!=` (`!=` meaning outside the range). Quote any value with
+spaces.
 
 Values are barewords (`region=Mallorca`, accents are fine); quote anything with
 spaces or punctuation: `place="el toro"`. Multi-valued fields (`buddy`,

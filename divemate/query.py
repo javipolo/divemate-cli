@@ -37,6 +37,8 @@ from typing import Any, Callable
 from lark import Lark, Transformer, v_args
 from lark.exceptions import LarkError
 
+from .dates import parse_period
+
 # --- AST (backend-agnostic) -----------------------------------------------
 
 
@@ -266,6 +268,28 @@ _TEXT_OPS = {"=", "!=", "~", "!~"}
 _NUM_OPS = {"=", "!=", "<", "<=", ">", ">="}
 
 
+def _expand(node: Node) -> Node:
+    """Rewrite `period=<range>` leaves into date comparisons before validation,
+    so e.g. `period="last year"` becomes `(date>=2025-01-01 and date<=2025-12-31)`.
+    `period` is a date-range shortcut, not a per-record field."""
+    if isinstance(node, (And, Or)):
+        return type(node)([_expand(it) for it in node.items])
+    if isinstance(node, Not):
+        return Not(_expand(node.item))
+    if isinstance(node, Flag) and node.field.lower() == "period":
+        raise ValueError("period needs a value, e.g. period=\"last year\"")
+    if isinstance(node, Compare) and node.field.lower() == "period":
+        if node.op not in ("=", "!="):
+            raise ValueError("period only supports = and != (it is a date range)")
+        try:
+            lo, hi = parse_period(node.value)
+        except ValueError as e:
+            raise ValueError(f"invalid period {node.value!r}: {e}") from None
+        rng = And([Compare("date", ">=", lo), Compare("date", "<=", hi)])
+        return Not(rng) if node.op == "!=" else rng
+    return node
+
+
 def _validate(node: Node) -> None:
     """Walk the AST, resolving fields and checking op/kind compatibility."""
     if isinstance(node, (And, Or)):
@@ -296,6 +320,7 @@ def parse(text: str) -> Node:
         tree = _PARSER.parse(text)
     except LarkError as e:
         raise ValueError(f"invalid query: {e}") from None
+    tree = _expand(tree)
     _validate(tree)
     return tree
 

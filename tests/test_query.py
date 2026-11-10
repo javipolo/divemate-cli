@@ -116,6 +116,24 @@ def test_year_derived():
     assert ev("year<2025") is False
 
 
+def test_period_expands_to_date_range():
+    # REC date is 2025-08-10
+    assert ev('period=2025') is True
+    assert ev('period=2024') is False
+    assert ev('period!=2024') is True
+    assert ev('period="month 2025-08"') is True
+    # expands to a date-range AND node, not a 'period' field
+    assert q.parse("period=2025") == And(
+        [Compare("date", ">=", "2025-01-01"), Compare("date", "<=", "2025-12-31")])
+
+
+def test_period_errors():
+    with pytest.raises(ValueError, match="only supports = and !="):
+        q.parse("period~2024")
+    with pytest.raises(ValueError, match="invalid period"):
+        q.parse("period=nonsense")
+
+
 # --- multi-valued + derived fields ----------------------------------------
 
 def test_multivalued_tank_and_buddy():
