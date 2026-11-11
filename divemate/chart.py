@@ -85,7 +85,7 @@ def profile_chart(times: list[float], depths: list[float],
     if have_temp:
         xt = [x for x, t in zip(times, temps, strict=True) if t is not None]  # type: ignore[arg-type]
         yt = [t for t in temps if t is not None]                 # type: ignore[union-attr]
-        plt.plot(xt, yt, yside="right", color="red+")
+        plt.plot(xt, yt, yside="right", color="red+", marker="braille")
         tticks = _int_ticks(math.floor(min(yt)), math.ceil(max(yt)), 7)
         plt.yticks(tticks, [str(t) for t in tticks], yside="right")
 
@@ -95,8 +95,9 @@ def profile_chart(times: list[float], depths: list[float],
     dticks = _int_ticks(0, dmax, 7)
     plt.yticks([-t for t in dticks], [str(t) for t in dticks], yside="left")
 
+    # x axis ticked every 15 minutes
     tmax = round(times[-1]) or 1
-    xticks = _int_ticks(0, tmax, 6)
+    xticks = list(range(0, int(tmax) + 1, 15)) or [0]
     plt.xticks(xticks, [str(t) for t in xticks])
 
     # x-axis label is drawn by us in the footer (merged with the legend), so no
@@ -121,7 +122,7 @@ def _profile_footer(lines: list[str], have_temp: bool) -> list[str]:
     blue, red, reset = "\033[94m", "\033[91m", "\033[0m"
     width = max((len(_ANSI_RE.sub("", ln).rstrip()) for ln in lines), default=40)
     left, mid = "▬ depth (m)", "time (min)"
-    right = "▬ temp (°C)" if have_temp else ""
+    right = "· temp (°C)" if have_temp else ""
     lL, lC, lR = len(left), len(mid), len(right)
 
     def colour(plain: str) -> str:
