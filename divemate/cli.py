@@ -325,6 +325,7 @@ _INFO_SECTIONS = [
      ("Water temp", "Watertemp", "°C")],
     [("Tanks", "__tanks__", ""),
      ("SAC (RMV)", "SAC", "L/min")],
+    [("Tags", "__tags__", "")],
 ]
 
 _INFO_LABEL_W = 13
@@ -377,6 +378,11 @@ def _print_dive(r: dict) -> None:
                     lines.append(f"{label:<{_INFO_LABEL_W}} {', '.join(buddies)}")
             elif col == "__tanks__":
                 lines.extend(_info_tanks(r))
+            elif col == "__tags__":
+                tags = r.get("tags") or []
+                if tags:
+                    lines.append(f"{label:<{_INFO_LABEL_W}} "
+                                 f"{' '.join('#' + t for t in tags)}")
             else:
                 line = _info_scalar(label, r.get(col), unit)
                 if line:

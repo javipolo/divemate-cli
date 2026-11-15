@@ -452,7 +452,23 @@ class DiveMate:
             r["tanks"] = self._tanks(r["ID"])
             r["buddies"] = [self.buddy_names().get(b, f"#{b}")
                             for b in self._parse_ids(r.get("BuddyIDs"))]
+            r["tags"] = self._combined_tags(r)
         return rows
+
+    def _combined_tags(self, r: dict[str, Any]) -> list[str]:
+        """Dive tags from both sources (comment #tags + Pandive structured),
+        de-duplicated case-insensitively, comment tags first."""
+        out: list[str] = []
+        seen: set[str] = set()
+        for t in _TAG_RE.findall(r.get("Comments") or ""):
+            if t.lower() not in seen:
+                seen.add(t.lower())
+                out.append(t)
+        for t in self.dive_tags().get(r["ID"], []):
+            if t.lower() not in seen:
+                seen.add(t.lower())
+                out.append(t)
+        return out
 
     def dive_profile(self, number: int, diver: int | None = None,
                      all_divers: bool = False) -> dict[str, Any] | None:

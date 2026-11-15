@@ -111,7 +111,9 @@ Structured tags (vs DiveMate's comment `#hashtags`):
   `DiveId` = `Logbook.ID` (**not** `Logbook.Number`).
 
 The `tag=` filter and `tags` listing read both sources: comment `#tags` and these
-structured tags (merged via the `db_tags` row key in `db.py`/`query.py`).
+structured tags (merged via the `db_tags` row key in `db.py`/`query.py`). `info`
+shows a dive's combined tags via `DiveMate._combined_tags` (exposed as the `tags`
+row key on `dive_full`, rendered by the `__tags__` section in `_print_dive`).
 
 ## 5. Project conventions
 
