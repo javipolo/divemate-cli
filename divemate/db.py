@@ -100,6 +100,7 @@ class DiveMate:
         self._owner: int | None = None
         self._buddies: dict[int, str] | None = None
         self._sac: dict[int, float] | None = None
+        self._dive_tags: dict[int, list[str]] | None = None
 
     def buddy_names(self) -> dict[int, str]:
         """Map Buddy.ID -> display name (cached). Buddies live in their own table;
@@ -111,6 +112,29 @@ class DiveMate:
                                 if x and x.strip())
                 self._buddies[r["ID"]] = name or f"#{r['ID']}"
         return self._buddies
+
+    def _has_table(self, name: str) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+        ).fetchone()
+        return row is not None
+
+    def dive_tags(self) -> dict[int, list[str]]:
+        """Map Logbook.ID -> structured tag names (cached).
+
+        Tags live in the Pandive extension tables (PandiveDiveTag links a dive to
+        PandiveTag.Name). A plain DiveMate DB has no such tables, so return empty.
+        """
+        if self._dive_tags is None:
+            self._dive_tags = {}
+            if self._has_table("PandiveDiveTag") and self._has_table("PandiveTag"):
+                for r in self.conn.execute(
+                        "SELECT dt.DiveId AS id, t.Name AS name "
+                        "FROM PandiveDiveTag dt "
+                        "JOIN PandiveTag t ON t.Id = dt.TagId "
+                        "WHERE t.Name IS NOT NULL AND t.Name != ''"):
+                    self._dive_tags.setdefault(r["id"], []).append(r["name"])
+        return self._dive_tags
 
     def sac(self) -> dict[int, float]:
         """Map dive ID -> SAC (a.k.a. RMV) in L/min, surface-equivalent.
@@ -384,15 +408,18 @@ class DiveMate:
             if r["Tanksize"]:
                 tanks.setdefault(r["LogID"], []).append(r["Tanksize"])
         names = self.buddy_names()
+        dive_tags = self.dive_tags()
         for r in rows:
             r["tank_sizes"] = tanks.get(r["ID"], [])
             r["buddies"] = [names.get(b, f"#{b}")
                             for b in self._parse_ids(r.get("BuddyIDs"))]
+            r["db_tags"] = dive_tags.get(r["ID"], [])
         kept = [r for r in rows if predicate(r)]
         for r in kept:
             r.pop("BuddyIDs", None)
             r.pop("tank_sizes", None)
             r.pop("buddies", None)
+            r.pop("db_tags", None)
         return kept
 
     def dive_full(self, number: int, diver: int | None = None,
@@ -648,15 +675,18 @@ class DiveMate:
     def tags(self, f: DiveFilter | None = None,
              predicate: Callable[[dict[str, Any]], bool] | None = None
              ) -> list[dict[str, Any]]:
-        """Discover #tags used in comments, with dive counts, most-used first.
+        """Discover tags, with dive counts, most-used first. Sources both the
+        #tags in comments and the Pandive extension's structured tags.
 
         Case-insensitive: #Sidemount and #sidemount count as one tag (lowercased).
         """
         rows = self.dives(f, predicate=predicate)
+        dive_tags = self.dive_tags()
         counts: dict[str, int] = {}
         for r in rows:
             c = r.get("Comments") or ""
             seen = {m.lower() for m in _TAG_RE.findall(c)}
+            seen |= {t.lower() for t in dive_tags.get(r["ID"], [])}
             for t in seen:
                 counts[t] = counts.get(t, 0) + 1
         return [

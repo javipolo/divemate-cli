@@ -160,7 +160,9 @@ _TAG_RE = re.compile(r"#(\w+)", re.UNICODE)
 
 
 def _tags(rec: dict) -> list[str]:
-    return _TAG_RE.findall(rec.get("Comments") or "")
+    # tags come from two places: #hashtags in the comment, and the structured
+    # tags of the Pandive extension (attached as 'db_tags')
+    return _TAG_RE.findall(rec.get("Comments") or "") + list(rec.get("db_tags") or [])
 
 
 def _col(name: str) -> Callable[[dict], Any]:
@@ -244,7 +246,7 @@ def help_text() -> str:
         "bool fields:    " + names(BOOL) + "   (bare flag, or =true / =false)",
         "",
         "shortcuts:",
-        "  tag=<name>      a #tag in the comments (without the #)",
+        "  tag=<name>      a #tag in the comments or a structured tag (no #)",
         '  period=<range>  2024, "this month", "last year", "month 2024-07",',
         '                  "last 30 days", …   (only = / !=)',
         "",

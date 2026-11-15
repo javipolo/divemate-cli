@@ -817,7 +817,8 @@ def build_parser() -> argparse.ArgumentParser:
     pt = sub.add_parser("tanks", help="list distinct tank sizes")
     pt.set_defaults(func=cmd_tanks)
 
-    ptag = sub.add_parser("tags", help="list #tags found in comments, with counts")
+    ptag = sub.add_parser("tags",
+                          help="list tags (comment #tags + structured), with counts")
     _add_filter_args(ptag)
     ptag.set_defaults(func=cmd_tags)
 

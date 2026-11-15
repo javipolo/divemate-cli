@@ -166,6 +166,14 @@ def test_tag_field():
     assert ev("not tag=cave") is False
 
 
+def test_tag_field_matches_structured_db_tags():
+    # Pandive's structured tags ride along as 'db_tags'; the filter sees both
+    rec = {**REC, "Comments": "", "db_tags": ["sidemount", "deco"]}
+    assert ev("tag=sidemount", rec) is True
+    assert ev("tag=deco", rec) is True
+    assert ev("tag=cave", rec) is False
+
+
 def test_bool_flags_and_equality():
     assert ev("night") is True
     assert ev("weekend") is True
