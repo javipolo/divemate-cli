@@ -15,6 +15,16 @@ frontend-agnostic data layer (no printing); `cli.py` is the argparse frontend;
   a pre-commit hook that regenerates it when `divemate/cli.py` changes; otherwise
   run `make completion` after CLI changes.
 
+## Mantenimiento del Mapa del Proyecto
+
+- `PROJECT_MAP.md` (raíz) es el índice arquitectónico del proyecto. **Al iniciar
+  cualquier tarea de exploración o planificación, léelo primero** antes de buscar
+  archivos manualmente.
+- Cada vez que crees, elimines o renombres un módulo, o alteres de forma
+  significativa la responsabilidad o la interfaz pública de un archivo existente,
+  **actualiza `PROJECT_MAP.md` como paso final de la tarea**, sin esperar a que se
+  te pida.
+
 ## Sample database
 
 A sample DiveMate `.ddb` for manual testing is pointed to by `DIVEMATE_DB` in
