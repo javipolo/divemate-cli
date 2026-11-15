@@ -381,8 +381,7 @@ def _print_dive(r: dict) -> None:
             elif col == "__tags__":
                 tags = r.get("tags") or []
                 if tags:
-                    lines.append(f"{label:<{_INFO_LABEL_W}} "
-                                 f"{' '.join('#' + t for t in tags)}")
+                    lines.append(f"{label:<{_INFO_LABEL_W}} {', '.join(tags)}")
             else:
                 line = _info_scalar(label, r.get(col), unit)
                 if line:
