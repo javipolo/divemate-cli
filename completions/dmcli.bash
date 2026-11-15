@@ -23,7 +23,7 @@ _dmcli() {
     count) opts="-h --help -q --query --include-deleted --diver --all-divers" ;;
     graph) opts="-h --help --by --desc -q --query --include-deleted --diver --all-divers avgdepth depth depthavg divetime maxdepth rmv sac temp time watertemp count" ;;
     stats) opts="-h --help -q --query --include-deleted --diver --all-divers" ;;
-    group) opts="-h --help --limit --sort -q --query --include-deleted --diver --all-divers Boat Buddy Computer Country Deco Divemaster Divesuit Divetype Entry O2 Place Rating Tanksize Tanktype UWCurrent Water Waves Weather year month week weekend night buddy region" ;;
+    group) opts="-h --help --limit --sort --bin -q --query --include-deleted --diver --all-divers Boat Buddy Computer Country Deco Divemaster Divesuit Divetype Entry O2 Place Rating Tanksize Tanktype UWCurrent Water Waves Weather year month week weekend night buddy region watertemp" ;;
     years) opts="-h --help -q --query --include-deleted --diver --all-divers" ;;
     tanks) opts="-h --help" ;;
     tags) opts="-h --help -q --query --include-deleted --diver --all-divers" ;;

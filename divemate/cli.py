@@ -617,13 +617,14 @@ def _stats_lines(s: dict) -> list[tuple[str, str]]:
 
 def cmd_group(db: DiveMate, a: argparse.Namespace) -> None:
     rows = db.group_count(a.by, _filter_from_args(a), limit=a.limit, order=a.sort,
-                          predicate=_predicate_from_args(a))
+                          predicate=_predicate_from_args(a), bin=a.bin)
     if a.json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
         return
     # virtual split dimensions have no natural plural noun — call them "groups"
     key = a.by.strip().lower()
-    field = "groups" if key in ("weekend", "weekday", "night", "day") \
+    field = "groups" if key in ("weekend", "weekday", "night", "day",
+                                "watertemp", "temp", "temperature", "temperatura") \
         else _plural(key)
     scope = f"Top {a.limit} {field}" if a.limit else field.capitalize()
     _header(f"{scope} by number of dives — {_describe_filters(a)}")
@@ -700,7 +701,7 @@ def _bash_completion_script() -> str:
     from .db import _GROUPABLE
     positional = {
         "group": [*sorted(_GROUPABLE), "year", "month", "week", "weekend",
-                  "night", "buddy", "region"],
+                  "night", "buddy", "region", "watertemp"],
         "graph": [*sorted(GRAPH_FIELDS), "count"],
         "info": ["last", "first"],
         "completion": ["bash"],
@@ -800,10 +801,12 @@ def build_parser() -> argparse.ArgumentParser:
     pg = sub.add_parser("group", help="count dives grouped by a field (+ filters)")
     pg.add_argument("by", help="field to group by: Place, Country, Region, Buddy, "
                     "Computer, Divesuit, Water, Tanksize, Boat, Rating, ... or year / "
-                    "month / week / weekend / night")
+                    "month / week / weekend / night / watertemp")
     pg.add_argument("--limit", type=int, help="show only the top N groups")
     pg.add_argument("--sort", choices=("count", "value"), default="count",
                     help="order by dive count (default) or by the group value")
+    pg.add_argument("--bin", type=int, default=2,
+                    help="band width in °C for 'watertemp' grouping (default 2)")
     _add_filter_args(pg)
     pg.set_defaults(func=cmd_group)
 

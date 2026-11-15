@@ -57,6 +57,9 @@ class DiveFilter:
 EMPTY_SENTINEL = -300.0
 SENTINEL_COLUMNS = ("Watertemp", "Airtemp")
 
+# width (°C) of a water-temperature bucket when grouping by 'watertemp'
+TEMP_BIN_C = 2
+
 # A dive is "night" when its entry hour is at/after NIGHT_START or before
 # NIGHT_END. Diving after 18:00 in daylight is rare enough that a fixed clock
 # cutoff beats any seasonal estimate given DiveMate's unreliable coordinates.
@@ -542,17 +545,19 @@ class DiveMate:
 
     def group_count(self, column: str, f: DiveFilter | None = None,
                     limit: int | None = None, order: str = "count",
-                    predicate: Callable[[dict[str, Any]], bool] | None = None
+                    predicate: Callable[[dict[str, Any]], bool] | None = None,
+                    bin: int = TEMP_BIN_C
                     ) -> list[dict[str, Any]]:
         """Count dives grouped by a field, ranked.
 
         `column` is case-insensitive and may be any field in GROUPABLE, or the
         virtual 'year' / 'month' (derived from the dive date).
         `order`: 'count' (default, most dives first) or 'value' (by group value).
+        `bin`: band width (°C) when grouping by 'watertemp'.
         """
         if column.strip().lower() in ("buddy", "buddies"):
             return self.group_buddies(f, limit=limit, order=order, predicate=predicate)
-        expr = self._group_expr(column)
+        expr = self._group_expr(column, bin)
         f = f or DiveFilter()
         where, params, needs_tank, needs_place = self._agg_where(f, predicate)
         # grouping by region (P.Region) also needs the Place join
@@ -591,7 +596,7 @@ class DiveMate:
         return rows[:limit] if limit else rows
 
     @staticmethod
-    def _group_expr(column: str) -> str:
+    def _group_expr(column: str, bin: int = TEMP_BIN_C) -> str:
         """Validate a group-by field and return its SQL expression."""
         key = column.strip().lower()
         if key in ("year", "año", "ano"):
@@ -603,6 +608,14 @@ class DiveMate:
             return (f"CASE WHEN {_ENTRY_HOUR} IS NULL THEN 'unknown' "
                     f"WHEN {_ENTRY_HOUR} >= {NIGHT_START} OR {_ENTRY_HOUR} < {NIGHT_END} "
                     f"THEN 'night' ELSE 'day' END")
+        if key in ("watertemp", "temp", "temperature", "temperatura"):
+            # bucket water temperature into fixed-width bands; the label's
+            # zero-padded lower bound sorts correctly as text, 'unknown' last
+            w = max(1, int(bin))
+            lo = f"(CAST(L.Watertemp / {w} AS INT) * {w})"
+            return (f"CASE WHEN L.Watertemp IS NULL "
+                    f"OR L.Watertemp <= {EMPTY_SENTINEL} THEN 'unknown' "
+                    f"ELSE printf('%02d–%02d°C', {lo}, {lo} + {w}) END")
         if key in ("month", "mes"):
             return "substr(L.Divedate,1,7)"
         if key in ("week", "semana"):
@@ -616,7 +629,7 @@ class DiveMate:
         if key in _GROUPABLE_LC:
             return f"L.{_GROUPABLE_LC[key]}"
         allowed = ", ".join([*sorted(_GROUPABLE), "year", "month", "week",
-                             "weekend", "night", "buddy", "region"])
+                             "weekend", "night", "buddy", "region", "watertemp"])
         raise ValueError(f"cannot group by {column!r}. Allowed: {allowed}")
 
     def dives_per_year(self, f: DiveFilter | None = None,
