@@ -69,6 +69,7 @@ if [[ "${1:-}" == "pull" ]]; then
 	KEY="${DIVEMATE_GDRIVE_KEY:?set DIVEMATE_GDRIVE_KEY to the service-account JSON key}"
 	KEY="$(readlink -f "$KEY")"
 	exec podman run --rm -i \
+		--userns=keep-id \
 		-v "$DBDIR:/data:Z" \
 		-v "$KEY:/key.json:ro,Z" \
 		-e DIVEMATE_DB="/data/$DBNAME" \
@@ -89,6 +90,7 @@ DB="$(readlink -f "$DB")"
 # -v ...:ro,Z  -> read-only bind + SELinux relabel (needed on Fedora/RHEL)
 # -i           -> keep stdin so piping (e.g. | jq) works
 exec podman run --rm -i \
+	--userns=keep-id \
 	-v "$DB:/data/DiveMate.ddb:ro,Z" \
 	-e DIVEMATE_DB=/data/DiveMate.ddb \
 	"$IMAGE" "$@"
