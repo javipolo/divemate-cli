@@ -5,10 +5,11 @@ FROM python:3.12-slim
 
 # --- stable layers first (rarely change -> stay cached across source edits) ---
 
-# Non-root user (defense-in-depth). The dmcli wrapper additionally uses
-# `--userns=keep-id`, which maps the host user onto this process at runtime so the
-# bind-mounted DB keeps the right ownership for both reads and `pull` writes.
-RUN useradd --create-home --uid 1000 app
+# No `USER` directive on purpose: the dmcli wrapper runs with `--userns=keep-id`,
+# which maps the host user onto the container process. That already runs as a
+# non-root uid (your host user) AND gives the bind-mounted DB/key the right owner
+# for both reads and `pull` writes. Pinning USER to a fixed uid here instead
+# breaks those mounts whenever the host uid differs from it.
 
 WORKDIR /app
 
@@ -30,7 +31,5 @@ RUN mkdir -p divemate && touch divemate/__init__.py \
 # Install the package itself without touching the already-installed deps.
 COPY divemate ./divemate
 RUN pip install --no-cache-dir --no-deps .
-
-USER app
 
 ENTRYPOINT ["dmcli"]
