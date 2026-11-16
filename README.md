@@ -460,6 +460,25 @@ works out of the box on Fedora/RHEL. The logbook is **never** copied into the
 image (excluded via `.containerignore`). Override the image name with
 `DIVEMATE_IMAGE` if you tagged it differently.
 
+### Running the image by hand (non-root)
+
+The wrapper runs podman with `--userns=keep-id`, which maps your host user onto
+the container process: it runs as your (non-root) uid and the bind-mounted DB
+keeps the right owner. If you invoke the image directly instead of through the
+wrapper, pass the same flag so you get a matching non-root user:
+
+```bash
+podman run --rm -i --userns=keep-id \
+  -v ~/dives/DiveMate.ddb:/data/DiveMate.ddb:ro,Z \
+  localhost/divemate-cli:latest list year=2026
+```
+
+Without `--userns=keep-id`, rootless podman maps the container's `root` to your
+host user — so it *reports* `uid=0` inside, but on the host it is still your
+unprivileged user (no real root, no privilege escalation). The image has no fixed
+`USER` on purpose: a pinned uid would break the mounts whenever your host uid
+differs from it. See the Containerfile comment for details.
+
 ## Syncing from Google Drive (`pull`)
 
 The DiveMate phone app uploads the `.ddb` to a Google Drive folder. `divemate
