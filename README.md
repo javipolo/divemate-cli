@@ -460,7 +460,7 @@ works out of the box on Fedora/RHEL. The logbook is **never** copied into the
 image (excluded via `.containerignore`). Override the image name with
 `DIVEMATE_IMAGE` if you tagged it differently.
 
-### Running the image by hand (non-root)
+### Running the image manually (non-root)
 
 The wrapper runs podman with `--userns=keep-id`, which maps your host user onto
 the container process: it runs as your (non-root) uid and the bind-mounted DB
